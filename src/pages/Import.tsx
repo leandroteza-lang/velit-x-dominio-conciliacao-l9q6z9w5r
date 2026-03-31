@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Database,
   Search,
+  RotateCcw,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { PreviewTable } from '@/components/PreviewTable'
@@ -109,6 +110,8 @@ export default function ImportPage() {
   const [lastUpdates, setLastUpdates] = useState<Record<number, string>>({})
   const [loadingCounts, setLoadingCounts] = useState(true)
   const [isProcessingLocal, setIsProcessingLocal] = useState(false)
+  const [hasBackup, setHasBackup] = useState(false)
+  const [undoDialogOpen, setUndoDialogOpen] = useState(false)
 
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewData, setPreviewData] = useState<any[]>([])
@@ -175,6 +178,13 @@ export default function ImportPage() {
       }
       setCounts(newCounts)
       setLastUpdates(newUpdates)
+
+      const { count: backupCount } = await supabase
+        .from('plano_contas_backup' as any)
+        .select('id', { count: 'exact' })
+        .eq('user_id', user.id)
+        .limit(1)
+      setHasBackup(!!(backupCount && backupCount > 0))
     } catch (err) {
       console.error(err)
     } finally {
@@ -236,17 +246,136 @@ export default function ImportPage() {
     }
   }
 
+  const executeCustomPlanoContasImport = async (
+    action: 'ADD_NEW' | 'UPDATE_EXISTING' | 'REPLACE_ALL',
+    rawData: any[],
+  ) => {
+    if (!user) throw new Error('Usuário não autenticado')
+
+    const { data: currentData, error: fetchErr } = await supabase
+      .from('plano_contas')
+      .select('*')
+      .eq('user_id', user.id)
+
+    if (fetchErr) throw fetchErr
+
+    const currentAccounts = currentData || []
+
+    if (currentAccounts.length > 0) {
+      await supabase.from('plano_contas_backup' as any).insert({
+        user_id: user.id,
+        data: currentAccounts,
+      })
+    }
+
+    const mergeInheritedFields = (newRow: any, existingRow: any) => {
+      return {
+        ...newRow,
+        descricao: existingRow.descricao || newRow.descricao,
+        tipo: existingRow.tipo || newRow.tipo,
+        natureza: existingRow.natureza || newRow.natureza,
+        finalidade: existingRow.finalidade || newRow.finalidade,
+        nivel_tipo: existingRow.nivel_tipo || newRow.nivel_tipo,
+      }
+    }
+
+    let toInsert: any[] = []
+
+    if (action === 'REPLACE_ALL' || action === 'UPDATE_EXISTING') {
+      toInsert = rawData.map((row) => {
+        const existing = currentAccounts.find(
+          (c) =>
+            (c.codigo && c.codigo === row.codigo) ||
+            (c.classificacao && c.classificacao === row.classificacao),
+        )
+        const merged = existing ? mergeInheritedFields(row, existing) : row
+        return {
+          ...merged,
+          user_id: user.id,
+        }
+      })
+      await supabase.from('plano_contas').delete().eq('user_id', user.id)
+    } else if (action === 'ADD_NEW') {
+      toInsert = rawData
+        .filter((row) => {
+          const existing = currentAccounts.find(
+            (c) =>
+              (c.codigo && c.codigo === row.codigo) ||
+              (c.classificacao && c.classificacao === row.classificacao),
+          )
+          return !existing
+        })
+        .map((row) => ({ ...row, user_id: user.id }))
+    }
+
+    toInsert = toInsert.map((item) => {
+      const obj = { ...item }
+      delete obj.id
+      return obj
+    })
+
+    for (let i = 0; i < toInsert.length; i += 500) {
+      const chunk = toInsert.slice(i, i + 500)
+      const { error: insErr } = await supabase.from('plano_contas').insert(chunk)
+      if (insErr) throw insErr
+    }
+  }
+
   const handlePcImportAction = async (action: 'ADD_NEW' | 'UPDATE_EXISTING' | 'REPLACE_ALL') => {
     if (!pcImportDialog.data) return
     setPcImportDialog((prev) => ({ ...prev, isProcessing: true }))
     try {
-      await executePlanoContasImport(action, pcImportDialog.data.rawData)
+      await executeCustomPlanoContasImport(action, pcImportDialog.data.rawData)
       toast.success('Plano de Contas atualizado com sucesso!')
       setPcImportDialog({ open: false, data: null, isProcessing: false })
       await fetchStatus()
     } catch (err: any) {
       toast.error('Erro ao atualizar Plano de Contas: ' + err.message)
       setPcImportDialog((prev) => ({ ...prev, isProcessing: false }))
+    }
+  }
+
+  const handleUndoImport = async () => {
+    if (!user) return
+    setIsProcessingLocal(true)
+    setUndoDialogOpen(false)
+    try {
+      const { data: backups, error: fetchErr } = await supabase
+        .from('plano_contas_backup' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .order('backup_date', { ascending: false })
+        .limit(1)
+
+      if (fetchErr) throw fetchErr
+
+      if (!backups || backups.length === 0) {
+        toast.error('Nenhum backup encontrado para desfazer.')
+        return
+      }
+
+      const latestBackup = backups[0]
+      const oldData = latestBackup.data
+
+      await supabase.from('plano_contas').delete().eq('user_id', user.id)
+
+      for (let i = 0; i < oldData.length; i += 500) {
+        const chunk = oldData.slice(i, i + 500)
+        const { error: insErr } = await supabase.from('plano_contas').insert(chunk)
+        if (insErr) throw insErr
+      }
+
+      await supabase
+        .from('plano_contas_backup' as any)
+        .delete()
+        .eq('id', latestBackup.id)
+
+      toast.success('Importação desfeita com sucesso! Plano de Contas restaurado.')
+      await fetchStatus()
+    } catch (err: any) {
+      toast.error('Erro ao desfazer importação: ' + err.message)
+    } finally {
+      setIsProcessingLocal(false)
     }
   }
 
@@ -450,6 +579,17 @@ export default function ImportPage() {
                     {card.step === 1 ? 'Ver Plano' : ''}
                   </Button>
                 )}
+                {card.step === 1 && hasBackup && (
+                  <Button
+                    variant="outline"
+                    className="w-12 px-0 text-amber-600 border-amber-200 hover:bg-amber-50 dark:border-amber-900 dark:hover:bg-amber-950/30"
+                    onClick={() => setUndoDialogOpen(true)}
+                    title="Desfazer Última Importação"
+                    disabled={isBusy}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           )
@@ -496,6 +636,32 @@ export default function ImportPage() {
           )}
         </Button>
       </div>
+
+      <Dialog open={undoDialogOpen} onOpenChange={setUndoDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desfazer Última Importação?</DialogTitle>
+            <DialogDescription>
+              Isso apagará o Plano de Contas atual e restaurará os dados exatos da última versão
+              antes da sua importação mais recente. Deseja continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUndoDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="default"
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={handleUndoImport}
+              disabled={isProcessingLocal}
+            >
+              {isProcessingLocal ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Sim, Restaurar Backup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={replaceDialog.open}
