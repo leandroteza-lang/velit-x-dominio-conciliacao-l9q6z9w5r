@@ -7,6 +7,7 @@ import Index from './pages/Index'
 import ImportPage from './pages/Import'
 import HistoryPage from './pages/History'
 import Results from './pages/Results'
+import ConciliacaoBalancetes from './pages/ConciliacaoBalancetes'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/import" element={<ImportPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/results" element={<Results />} />
+            <Route path="/conciliacao-balancetes" element={<ConciliacaoBalancetes />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
