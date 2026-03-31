@@ -164,6 +164,33 @@ export type Database = {
           },
         ]
       }
+      export_history: {
+        Row: {
+          export_date: string
+          file_name: string
+          id: string
+          records_count: number | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          export_date?: string
+          file_name: string
+          id?: string
+          records_count?: number | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          export_date?: string
+          file_name?: string
+          id?: string
+          records_count?: number | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       importacoes: {
         Row: {
           created_at: string
@@ -451,6 +478,39 @@ export type Database = {
           },
         ]
       }
+      user_settings: {
+        Row: {
+          created_at: string
+          csv_separator: string | null
+          date_format: string | null
+          export_directory: string | null
+          id: string
+          number_format: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          csv_separator?: string | null
+          date_format?: string | null
+          export_directory?: string | null
+          id?: string
+          number_format?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          csv_separator?: string | null
+          date_format?: string | null
+          export_directory?: string | null
+          id?: string
+          number_format?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -631,6 +691,13 @@ export const Constants = {
 //   conta: text (nullable)
 //   divergencia: numeric (nullable)
 //   status: text (nullable)
+// Table: export_history
+//   id: uuid (not null, default: gen_random_uuid())
+//   user_id: uuid (not null)
+//   file_name: text (not null)
+//   export_date: timestamp with time zone (not null, default: now())
+//   type: text (not null)
+//   records_count: integer (nullable, default: 0)
 // Table: importacoes
 //   id: uuid (not null, default: gen_random_uuid())
 //   user_id: uuid (not null)
@@ -692,6 +759,15 @@ export const Constants = {
 //   importacao_id: uuid (not null)
 //   total_velit: numeric (nullable)
 //   total_dominio: numeric (nullable)
+// Table: user_settings
+//   id: uuid (not null, default: gen_random_uuid())
+//   user_id: uuid (not null)
+//   export_directory: text (nullable, default: ''::text)
+//   csv_separator: text (nullable, default: ';'::text)
+//   date_format: text (nullable, default: 'DD/MM/YYYY'::text)
+//   number_format: text (nullable, default: 'pt-BR'::text)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 
 // --- CONSTRAINTS ---
 // Table: balancete_dominio
@@ -706,6 +782,9 @@ export const Constants = {
 // Table: conciliacao_razoes
 //   FOREIGN KEY conciliacao_razoes_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY conciliacao_razoes_pkey: PRIMARY KEY (id)
+// Table: export_history
+//   PRIMARY KEY export_history_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY fk_user_history: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 // Table: importacoes
 //   PRIMARY KEY importacoes_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY importacoes_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -730,6 +809,10 @@ export const Constants = {
 // Table: resumo_lancamentos
 //   FOREIGN KEY resumo_lancamentos_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY resumo_lancamentos_pkey: PRIMARY KEY (id)
+// Table: user_settings
+//   FOREIGN KEY fk_user: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+//   PRIMARY KEY user_settings_pkey: PRIMARY KEY (id)
+//   UNIQUE user_settings_user_id_key: UNIQUE (user_id)
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: balancete_dominio
@@ -744,6 +827,13 @@ export const Constants = {
 // Table: conciliacao_razoes
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
+// Table: export_history
+//   Policy "auth_export_history_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (auth.uid() = user_id)
+//   Policy "auth_export_history_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (auth.uid() = user_id)
+//   Policy "auth_export_history_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (auth.uid() = user_id)
 // Table: importacoes
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
@@ -769,3 +859,15 @@ export const Constants = {
 // Table: resumo_lancamentos
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
+// Table: user_settings
+//   Policy "auth_user_settings_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (auth.uid() = user_id)
+//   Policy "auth_user_settings_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (auth.uid() = user_id)
+//   Policy "auth_user_settings_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (auth.uid() = user_id)
+//     WITH CHECK: (auth.uid() = user_id)
+
+// --- INDEXES ---
+// Table: user_settings
+//   CREATE UNIQUE INDEX user_settings_user_id_key ON public.user_settings USING btree (user_id)

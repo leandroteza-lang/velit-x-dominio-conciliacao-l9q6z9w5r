@@ -1,293 +1,432 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Check, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
-import { UploadZone } from '@/components/UploadZone'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Check,
+  UploadCloud,
+  Eye,
+  FileSpreadsheet,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Database,
+} from 'lucide-react'
 import { PreviewTable } from '@/components/PreviewTable'
 import { toast } from 'sonner'
 import { useReconciliationStore } from '@/stores/useReconciliationStore'
+import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/use-auth'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 
-const STEPS = [
+const CARDS = [
   {
-    id: 1,
-    title: 'PASSO 1: Plano de Contas',
-    key: 'plano',
+    step: 1,
+    title: 'Plano de Contas',
+    description: 'Estrutura de contas contábeis',
+    table: 'plano_contas',
     headers: ['Código', 'Classificação', 'Nome', 'Descrição', 'Máscara'],
+    columns: ['codigo', 'classificacao', 'nome', 'descricao', 'mascara'],
   },
   {
-    id: 2,
-    title: 'PASSO 2: Balancete Domínio',
-    key: 'balancete_dominio',
+    step: 2,
+    title: 'Balancete Domínio',
+    description: 'Saldos do sistema Domínio',
+    table: 'balancete_dominio',
     headers: ['Código', 'Classificação', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
+    columns: ['codigo', 'classificacao', 'saldo_anterior', 'debito', 'credito', 'saldo_atual'],
   },
   {
-    id: 3,
-    title: 'PASSO 3: Balancete VELIT',
-    key: 'balancete_velit',
+    step: 3,
+    title: 'Balancete VELIT',
+    description: 'Saldos do sistema VELIT',
+    table: 'balancete_velit',
     headers: ['Conta Contábil', 'Descrição', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
+    columns: ['conta_contabil', 'descricao', 'saldo_anterior', 'debito', 'credito', 'saldo_atual'],
   },
   {
-    id: 4,
-    title: 'PASSO 4: Conciliação',
-    key: 'conciliacao',
-    headers: ['Conta Contábil', 'Descrição', 'Saldo Domínio', 'Saldo VELIT', 'Diferença', 'Status'],
-  },
-  {
-    id: 5,
-    title: 'PASSO 5: Razão Domínio',
-    key: 'razao_dominio',
+    step: 5,
+    title: 'Razão Domínio',
+    description: 'Lançamentos detalhados Domínio',
+    table: 'razao_dominio',
     headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
+    columns: ['conta', 'data', 'historico', 'debito', 'credito', 'saldo'],
   },
   {
-    id: 6,
-    title: 'PASSO 6: Razão VELIT',
-    key: 'razao_velit',
+    step: 6,
+    title: 'Razão VELIT',
+    description: 'Lançamentos detalhados VELIT',
+    table: 'razao_velit',
     headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
+    columns: ['conta', 'data', 'historico', 'debito', 'credito', 'saldo'],
   },
 ]
 
 export default function ImportPage() {
-  const [step, setStep] = useState(1)
-  const [uploaded, setUploaded] = useState<Record<number, boolean>>({})
-  const [isProcessingStep4, setIsProcessingStep4] = useState(false)
-  const [hasProcessedStep4, setHasProcessedStep4] = useState(false)
-
+  const { user } = useAuth()
   const navigate = useNavigate()
-  const {
-    processData,
-    isProcessing,
-    reset,
-    uploadFile,
-    processConciliacaoBalancetes,
-    previewData,
-  } = useReconciliationStore()
+
+  const { processData, isProcessing, uploadFile, processConciliacaoBalancetes, reset } =
+    useReconciliationStore()
+
+  const [importacao, setImportacao] = useState<any>(null)
+  const [counts, setCounts] = useState<Record<number, number>>({})
+  const [lastUpdates, setLastUpdates] = useState<Record<number, string>>({})
+  const [loadingCounts, setLoadingCounts] = useState(true)
+  const [isProcessingLocal, setIsProcessingLocal] = useState(false)
+
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewHeaders, setPreviewHeaders] = useState<string[]>([])
+  const [previewTitle, setPreviewTitle] = useState('')
+
+  const [replaceDialog, setReplaceDialog] = useState<{ open: boolean; step: number | null }>({
+    open: false,
+    step: null,
+  })
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   useEffect(() => {
     reset()
-  }, [reset])
+    fetchStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
-  useEffect(() => {
-    if (step === 4 && !hasProcessedStep4) {
-      setIsProcessingStep4(true)
-      processConciliacaoBalancetes()
-        .then(() => {
-          setIsProcessingStep4(false)
-          setHasProcessedStep4(true)
-        })
-        .catch((err) => {
-          toast.error('Erro ao processar conciliação: ' + err.message)
-          setIsProcessingStep4(false)
-        })
-    }
-  }, [step, hasProcessedStep4, processConciliacaoBalancetes])
-
-  const currentStep = STEPS[step - 1]
-  const progress = (step / STEPS.length) * 100
-
-  const handleUpload = async (file: File) => {
+  const fetchStatus = async () => {
+    if (!user) return
+    setLoadingCounts(true)
     try {
-      await uploadFile(step, file)
-      setUploaded((prev) => ({ ...prev, [step]: true }))
-      toast.success('Arquivo salvo no banco de dados!')
-    } catch (err: any) {
-      toast.error('Erro ao salvar: ' + err.message)
+      const { data: imp } = await supabase
+        .from('importacoes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (imp) {
+        setImportacao(imp)
+        const newCounts: Record<number, number> = {}
+        const newUpdates: Record<number, string> = {}
+
+        for (const card of CARDS) {
+          const { count } = await supabase
+            .from(card.table)
+            .select('*', { count: 'exact', head: true })
+            .eq('importacao_id', imp.id)
+
+          newCounts[card.step] = count || 0
+          if (count && count > 0) {
+            newUpdates[card.step] = imp.created_at
+          }
+        }
+        setCounts(newCounts)
+        setLastUpdates(newUpdates)
+      } else {
+        setCounts({})
+        setLastUpdates({})
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingCounts(false)
     }
   }
 
-  const handleNext = () => {
-    if (step < 6) setStep(step + 1)
+  const handleCardUploadClick = (step: number) => {
+    if (counts[step] > 0) {
+      setReplaceDialog({ open: true, step })
+    } else {
+      fileInputRefs.current[step]?.click()
+    }
   }
 
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1)
+  const confirmReplace = () => {
+    const step = replaceDialog.step
+    setReplaceDialog({ open: false, step: null })
+    if (step) {
+      fileInputRefs.current[step]?.click()
+    }
   }
 
-  const handleConfirm = async () => {
-    if (!uploaded[6]) return
-    await processData()
-    toast.success('Importação confirmada com sucesso!')
-    navigate('/results')
+  const onFileChange = async (step: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsProcessingLocal(true)
+    try {
+      if (importacao && counts[step] > 0) {
+        const card = CARDS.find((c) => c.step === step)
+        if (card) {
+          await supabase.from(card.table).delete().eq('importacao_id', importacao.id)
+        }
+      }
+
+      await uploadFile(step, file)
+      toast.success(`Arquivo importado com sucesso!`)
+
+      await fetchStatus()
+    } catch (err: any) {
+      toast.error('Erro ao importar: ' + err.message)
+    } finally {
+      setIsProcessingLocal(false)
+      if (event.target) {
+        event.target.value = ''
+      }
+    }
   }
 
-  const isStepValid = () => {
-    if (step === 4) return hasProcessedStep4 && !isProcessingStep4
-    return !!uploaded[step]
+  const handleViewData = async (step: number) => {
+    if (!importacao) return
+    const card = CARDS.find((c) => c.step === step)
+    if (!card) return
+
+    try {
+      const { data } = await supabase
+        .from(card.table)
+        .select(card.columns.join(','))
+        .eq('importacao_id', importacao.id)
+        .limit(10)
+
+      const mappedData = (data || []).map((row) => {
+        const newObj: any = {}
+        card.columns.forEach((col) => {
+          newObj[col] = row[col]
+        })
+        return newObj
+      })
+
+      setPreviewData(mappedData)
+      setPreviewHeaders(card.headers)
+      setPreviewTitle(`Pré-visualização: ${card.title}`)
+      setPreviewModalOpen(true)
+    } catch (err: any) {
+      toast.error('Erro ao carregar dados: ' + err.message)
+    }
+  }
+
+  const canConciliate =
+    Object.keys(counts).length > 0 && CARDS.every((c) => (counts[c.step] || 0) > 0)
+  const isBusy = isProcessing || isProcessingLocal || loadingCounts
+
+  const handleGenerateConciliation = async () => {
+    setIsProcessingLocal(true)
+    try {
+      if (counts[2] > 0 && counts[3] > 0) {
+        await processConciliacaoBalancetes()
+      }
+      await processData()
+      toast.success('Conciliação gerada com sucesso!')
+      navigate('/results')
+    } catch (err: any) {
+      toast.error('Erro ao processar conciliação: ' + err.message)
+    } finally {
+      setIsProcessingLocal(false)
+    }
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl flex-1 flex flex-col">
-      <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-3">
-          Assistente de Importação
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-          Siga os passos abaixo para fazer o upload e conciliar os dados contábeis entre os sistemas
-          Velit e Domínio.
-        </p>
-      </div>
-
-      <div className="mb-10 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
-        <div className="flex mb-12 relative w-full items-start justify-between">
-          <div className="absolute top-4 left-0 w-full h-[2px] bg-muted -z-10"></div>
-          <div
-            className="absolute top-4 left-0 h-[2px] bg-primary transition-all duration-500 -z-10"
-            style={{ width: `${((step - 1) / (STEPS.length - 1)) * 100}%` }}
-          ></div>
-
-          {STEPS.map((s) => (
-            <div key={s.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 shadow-sm ${
-                  step === s.id
-                    ? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
-                    : step > s.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {step > s.id ? <Check className="h-4 w-4" /> : s.id}
-              </div>
-              <span
-                className={`mt-2 text-[10px] sm:text-xs text-center max-w-[80px] sm:max-w-[120px] leading-tight font-medium transition-colors ${
-                  step >= s.id ? 'text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                {s.title}
-              </span>
-            </div>
-          ))}
+    <div className="container mx-auto py-8 px-4 max-w-7xl flex-1 flex flex-col animate-in fade-in duration-500">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-2 flex items-center gap-3">
+            <Database className="h-8 w-8 text-primary" />
+            Dashboard de Gestão de Dados
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 max-w-2xl">
+            Importe e monitore os arquivos contábeis necessários para a conciliação. O sistema
+            indicará quais arquivos já estão presentes na base.
+          </p>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200 fill-mode-both">
-        <div className="mb-4 space-y-2">
-          <div className="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400">
-            <span>{currentStep.title}</span>
-            <span>Step {step} of 6</span>
-          </div>
-          <Progress value={progress} className="h-2" />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {CARDS.map((card) => {
+          const count = counts[card.step] || 0
+          const hasData = count > 0
+          const updateDate = lastUpdates[card.step]
 
-        <Card className="flex-1 shadow-md border-slate-200 dark:border-slate-800 flex flex-col min-h-[400px]">
-          <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b pb-4">
-            <CardTitle className="text-xl">{currentStep.title}</CardTitle>
-            <CardDescription>
-              {step === 4
-                ? 'Analisando os balancetes enviados nos Passos 2 e 3 para encontrar divergências.'
-                : `Faça o upload do arquivo correspondente ao ${currentStep.title}.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 flex-1">
-            {step !== 4 ? (
-              <div className="space-y-8 animate-in fade-in duration-500">
-                <UploadZone
-                  title={`Upload: ${currentStep.title}`}
-                  description={`Selecione o arquivo Excel ou CSV para ${currentStep.title}`}
-                  isUploaded={!!uploaded[step]}
-                  onUpload={handleUpload}
-                />
-
-                {uploaded[step] && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Pré-visualização de Dados (Primeiras 10 linhas)
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {isProcessingStep4 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center animate-in fade-in duration-300">
-                    <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                    <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
-                      Cruzando Informações...
-                    </h3>
-                    <p className="text-slate-500">
-                      Comparando as contas contábeis e identificando diferenças de saldo.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-400 p-4 rounded-md mb-6 flex items-start gap-3 border border-emerald-100 dark:border-emerald-900/50">
-                      <Check className="h-5 w-5 mt-0.5 shrink-0" />
-                      <div>
-                        <h4 className="font-semibold text-sm">Conciliação Concluída</h4>
-                        <p className="text-sm opacity-90">
-                          Os dados dos balancetes foram processados com sucesso. Veja o resumo
-                          abaixo.
-                        </p>
-                      </div>
-                    </div>
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Resumo de Divergências Encontradas
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="flex justify-between items-center mt-8 pt-4">
-          <Button
-            disabled={step === 1 || isProcessing}
-            onClick={handleBack}
-            variant="outline"
-            size="lg"
-            className="w-32"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-
-          {step < 6 ? (
-            <Button
-              disabled={!isStepValid() || isProcessing}
-              onClick={handleNext}
-              size="lg"
-              className="w-32"
-            >
-              Próximo
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              disabled={
-                !(
-                  uploaded[1] &&
-                  uploaded[2] &&
-                  uploaded[3] &&
-                  hasProcessedStep4 &&
-                  uploaded[5] &&
-                  uploaded[6]
-                ) || isProcessing
-              }
-              onClick={handleConfirm}
-              size="lg"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[200px]"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
-                </>
-              ) : (
-                <>
-                  <Check className="mr-2 h-4 w-4" /> Confirmar Importação
-                </>
+          return (
+            <Card
+              key={card.step}
+              className={cn(
+                'transition-all duration-300 flex flex-col',
+                hasData
+                  ? 'border-emerald-500/30 bg-emerald-50/10 dark:bg-emerald-950/20 shadow-sm hover:shadow-md'
+                  : 'border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300',
               )}
-            </Button>
-          )}
-        </div>
+            >
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileSpreadsheet
+                    className={cn('w-5 h-5', hasData ? 'text-emerald-500' : 'text-slate-400')}
+                  />
+                  {card.title}
+                </CardTitle>
+                <CardDescription className="line-clamp-1">{card.description}</CardDescription>
+              </CardHeader>
+
+              <CardContent className="flex-1">
+                <div className="flex items-center min-h-[40px]">
+                  {loadingCounts ? (
+                    <Skeleton className="h-10 w-full rounded-md" />
+                  ) : hasData ? (
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                        {count.toLocaleString('pt-BR')} registros na base
+                      </span>
+                      {updateDate && (
+                        <span className="text-xs text-muted-foreground mt-1 ml-7">
+                          Atualizado em{' '}
+                          {format(new Date(updateDate), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm font-medium text-amber-600 dark:text-amber-500 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" /> Pendente
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+
+              <CardFooter className="pt-0 flex gap-2 mt-auto">
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".csv,.xlsx,.xls,.txt"
+                  ref={(el) => (fileInputRefs.current[card.step] = el)}
+                  onChange={(e) => onFileChange(card.step, e)}
+                />
+                <Button
+                  variant={hasData ? 'outline' : 'default'}
+                  className="flex-1"
+                  onClick={() => handleCardUploadClick(card.step)}
+                  disabled={isBusy}
+                >
+                  <UploadCloud className="w-4 h-4 mr-2" />
+                  {hasData ? 'Substituir' : 'Importar'}
+                </Button>
+                {hasData && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => handleViewData(card.step)}
+                    title="Ver dados atuais"
+                    disabled={isBusy}
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          )
+        })}
       </div>
+
+      <div
+        className={cn(
+          'mt-auto flex flex-col sm:flex-row items-center justify-between p-6 rounded-xl border transition-colors duration-500',
+          canConciliate
+            ? 'bg-primary/5 border-primary/20 dark:bg-primary/10'
+            : 'bg-slate-50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-800',
+        )}
+      >
+        <div className="text-center sm:text-left mb-4 sm:mb-0">
+          <h3 className="font-semibold text-lg text-slate-900 dark:text-white">
+            Pronto para conciliar?
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {canConciliate
+              ? 'Todos os arquivos essenciais estão carregados. Você já pode iniciar o processamento.'
+              : 'Importe todos os arquivos pendentes para liberar a conciliação global.'}
+          </p>
+        </div>
+        <Button
+          size="lg"
+          className={cn(
+            'min-w-[200px] shadow-sm',
+            canConciliate && !isBusy
+              ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
+              : '',
+          )}
+          disabled={!canConciliate || isBusy}
+          onClick={handleGenerateConciliation}
+        >
+          {isBusy ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processando...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-5 h-5 mr-2" /> Gerar Conciliação Global
+            </>
+          )}
+        </Button>
+      </div>
+
+      <Dialog
+        open={replaceDialog.open}
+        onOpenChange={(o) => !o && setReplaceDialog({ open: false, step: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Substituir Dados Existentes?</DialogTitle>
+            <DialogDescription>
+              Já existem{' '}
+              {replaceDialog.step ? counts[replaceDialog.step]?.toLocaleString('pt-BR') : 0}{' '}
+              registros na base para este tipo de arquivo. Ao importar um novo, os dados atuais
+              serão apagados e substituídos. Deseja continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplaceDialog({ open: false, step: null })}>
+              Cancelar
+            </Button>
+            <Button variant="default" onClick={confirmReplace}>
+              Sim, Substituir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{previewTitle}</DialogTitle>
+            <DialogDescription>
+              Exibindo as 10 primeiras linhas da base de dados atual.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-4 border rounded-md">
+            <PreviewTable headers={previewHeaders} data={previewData} />
+          </div>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setPreviewModalOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
