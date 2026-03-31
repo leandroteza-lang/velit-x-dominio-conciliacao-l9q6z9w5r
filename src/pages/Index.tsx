@@ -1,292 +1,323 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Check, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
-import { UploadZone } from '@/components/UploadZone'
-import { PreviewTable } from '@/components/PreviewTable'
-import { toast } from 'sonner'
-import { useReconciliationStore } from '@/stores/useReconciliationStore'
+import { Button } from '@/components/ui/button'
+import { ArrowRight, FileUp, CheckCircle2, FileText, Activity, Clock } from 'lucide-react'
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { supabase } from '@/lib/supabase/client'
+import { format, subDays } from 'date-fns'
 
-const STEPS = [
-  {
-    id: 1,
-    title: 'PASSO 1: Plano de Contas',
-    key: 'plano',
-    headers: ['Código', 'Classificação', 'Nome', 'Descrição', 'Máscara'],
-  },
-  {
-    id: 2,
-    title: 'PASSO 2: Balancete Domínio',
-    key: 'balancete_dominio',
-    headers: ['Código', 'Classificação', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
-  },
-  {
-    id: 3,
-    title: 'PASSO 3: Balancete VELIT',
-    key: 'balancete_velit',
-    headers: ['Conta Contábil', 'Descrição', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
-  },
-  {
-    id: 4,
-    title: 'PASSO 4: Conciliação',
-    key: 'conciliacao',
-    headers: ['Conta Contábil', 'Descrição', 'Saldo Domínio', 'Saldo VELIT', 'Diferença', 'Status'],
-  },
-  {
-    id: 5,
-    title: 'PASSO 5: Razão Domínio',
-    key: 'razao_dominio',
-    headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
-  },
-  {
-    id: 6,
-    title: 'PASSO 6: Razão VELIT',
-    key: 'razao_velit',
-    headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
-  },
-]
-
-export default function Index() {
-  const [step, setStep] = useState(1)
-  const [uploaded, setUploaded] = useState<Record<number, boolean>>({})
-  const [isProcessingStep4, setIsProcessingStep4] = useState(false)
-  const [hasProcessedStep4, setHasProcessedStep4] = useState(false)
-
-  const navigate = useNavigate()
-  const {
-    processData,
-    isProcessing,
-    reset,
-    uploadFile,
-    processConciliacaoBalancetes,
-    previewData,
-  } = useReconciliationStore()
+export default function Dashboard() {
+  const [stats, setStats] = useState({
+    imports: 0,
+    conciliations: 0,
+    entries: 0,
+  })
+  const [timelineData, setTimelineData] = useState<any[]>([])
+  const [recentOps, setRecentOps] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    reset()
-  }, [reset])
+    async function fetchData() {
+      try {
+        setIsLoading(true)
 
-  useEffect(() => {
-    if (step === 4 && !hasProcessedStep4) {
-      setIsProcessingStep4(true)
-      processConciliacaoBalancetes()
-        .then(() => {
-          setIsProcessingStep4(false)
-          setHasProcessedStep4(true)
+        const [{ count: imports }, { count: conciliations }, { count: entries }] =
+          await Promise.all([
+            supabase.from('importacoes').select('*', { count: 'exact', head: true }),
+            supabase.from('conciliacao_balancetes').select('*', { count: 'exact', head: true }),
+            supabase.from('lancamentos_dominio').select('*', { count: 'exact', head: true }),
+          ])
+
+        setStats({
+          imports: imports || 0,
+          conciliations: conciliations || 0,
+          entries: entries || 0,
         })
-        .catch((err) => {
-          toast.error('Erro ao processar conciliação: ' + err.message)
-          setIsProcessingStep4(false)
+
+        const { data: recent } = await supabase
+          .from('importacoes')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (recent) setRecentOps(recent)
+
+        const sevenDaysAgo = subDays(new Date(), 7).toISOString()
+        const { data: allImports } = await supabase
+          .from('importacoes')
+          .select('created_at')
+          .gte('created_at', sevenDaysAgo)
+
+        const last7Days = Array.from({ length: 7 }).map((_, i) => {
+          const d = subDays(new Date(), 6 - i)
+          return {
+            date: format(d, 'dd/MM'),
+            dateStr: format(d, 'yyyy-MM-dd'),
+            quantidade: 0,
+          }
         })
+
+        if (allImports) {
+          allImports.forEach((imp) => {
+            const dateStr = format(new Date(imp.created_at), 'yyyy-MM-dd')
+            const day = last7Days.find((d) => d.dateStr === dateStr)
+            if (day) day.quantidade++
+          })
+        }
+
+        setTimelineData(last7Days)
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [step, hasProcessedStep4, processConciliacaoBalancetes])
 
-  const currentStep = STEPS[step - 1]
-  const progress = (step / STEPS.length) * 100
-
-  const handleUpload = async (file: File) => {
-    try {
-      await uploadFile(step, file)
-      setUploaded((prev) => ({ ...prev, [step]: true }))
-      toast.success('Arquivo salvo no banco de dados!')
-    } catch (err: any) {
-      toast.error('Erro ao salvar: ' + err.message)
-    }
-  }
-
-  const handleNext = () => {
-    if (step < 6) setStep(step + 1)
-  }
-
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1)
-  }
-
-  const handleConfirm = async () => {
-    if (!uploaded[6]) return
-    await processData()
-    toast.success('Importação confirmada com sucesso!')
-    navigate('/results')
-  }
-
-  const isStepValid = () => {
-    if (step === 4) return hasProcessedStep4 && !isProcessingStep4
-    return !!uploaded[step]
-  }
+    fetchData()
+  }, [])
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl flex-1 flex flex-col">
-      <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-3">
-          Assistente de Importação
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-          Siga os passos abaixo para fazer o upload e conciliar os dados contábeis entre os sistemas
-          Velit e Domínio.
-        </p>
+    <div className="container mx-auto py-8 px-4 max-w-7xl space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-[#0f172a] p-8 rounded-2xl text-white shadow-lg relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+
+        <div className="relative z-10">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
+            Painel de Conciliação
+          </h1>
+          <p className="text-slate-300 max-w-2xl text-sm md:text-base">
+            Acompanhe o volume de importações, conciliações e a saúde geral do sistema contábil em
+            tempo real. Padrão Domínio x VELIT.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-4 relative z-10">
+          <Button
+            asChild
+            variant="outline"
+            className="bg-transparent text-white border-slate-600 hover:bg-slate-800 hover:text-white"
+          >
+            <Link to="/history">
+              <Clock className="mr-2 h-4 w-4" /> Ver Histórico
+            </Link>
+          </Button>
+          <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-md">
+            <Link to="/import">
+              <FileUp className="mr-2 h-4 w-4" /> Iniciar Importação
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="mb-10 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
-        <div className="flex mb-12 relative w-full items-start justify-between">
-          <div className="absolute top-4 left-0 w-full h-[2px] bg-muted -z-10"></div>
-          <div
-            className="absolute top-4 left-0 h-[2px] bg-primary transition-all duration-500 -z-10"
-            style={{ width: `${((step - 1) / (STEPS.length - 1)) * 100}%` }}
-          ></div>
-
-          {STEPS.map((s) => (
-            <div key={s.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 shadow-sm ${
-                  step === s.id
-                    ? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
-                    : step > s.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {step > s.id ? <Check className="h-4 w-4" /> : s.id}
-              </div>
-              <span
-                className={`mt-2 text-[10px] sm:text-xs text-center max-w-[80px] sm:max-w-[120px] leading-tight font-medium transition-colors ${
-                  step >= s.id ? 'text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                {s.title}
-              </span>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="border-l-4 border-l-blue-600 shadow-sm transition-all hover:shadow-md">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">
+              Total de Importações
+            </CardTitle>
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-md">
+              <FileUp className="h-4 w-4" />
             </div>
-          ))}
-        </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded"></div>
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.imports}</div>
+            )}
+            <p className="text-xs text-slate-500 mt-1">Arquivos processados na plataforma</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-emerald-500 shadow-sm transition-all hover:shadow-md">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">
+              Total de Conciliações
+            </CardTitle>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-md">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded"></div>
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.conciliations}</div>
+            )}
+            <p className="text-xs text-slate-500 mt-1">Contas analisadas com sucesso</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-500 shadow-sm transition-all hover:shadow-md">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">
+              Lançamentos Gerados
+            </CardTitle>
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-md">
+              <FileText className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded"></div>
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.entries}</div>
+            )}
+            <p className="text-xs text-slate-500 mt-1">Registros prontos para exportação</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-indigo-500 shadow-sm transition-all hover:shadow-md bg-gradient-to-br from-white to-slate-50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Status do Sistema</CardTitle>
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-md">
+              <Activity className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <span className="text-2xl font-bold text-slate-900">Operacional</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">Todos os serviços online e ativos</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200 fill-mode-both">
-        <div className="mb-4 space-y-2">
-          <div className="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400">
-            <span>{currentStep.title}</span>
-            <span>Step {step} of 6</span>
-          </div>
-          <Progress value={progress} className="h-2" />
-        </div>
-
-        <Card className="flex-1 shadow-md border-slate-200 dark:border-slate-800 flex flex-col min-h-[400px]">
-          <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b pb-4">
-            <CardTitle className="text-xl">{currentStep.title}</CardTitle>
-            <CardDescription>
-              {step === 4
-                ? 'Analisando os balancetes enviados nos Passos 2 e 3 para encontrar divergências.'
-                : `Faça o upload do arquivo correspondente ao ${currentStep.title}.`}
-            </CardDescription>
+      {/* Charts & Timeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 shadow-sm border-slate-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-slate-800 font-semibold">Volume de Importações</CardTitle>
+            <CardDescription>Quantidade de processos realizados nos últimos 7 dias</CardDescription>
           </CardHeader>
-          <CardContent className="p-6 flex-1">
-            {step !== 4 ? (
-              <div className="space-y-8 animate-in fade-in duration-500">
-                <UploadZone
-                  title={`Upload: ${currentStep.title}`}
-                  description={`Selecione o arquivo Excel ou CSV para ${currentStep.title}`}
-                  isUploaded={!!uploaded[step]}
-                  onUpload={handleUpload}
-                />
-
-                {uploaded[step] && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Pré-visualização de Dados (Primeiras 10 linhas)
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
-                    </div>
-                  </div>
-                )}
+          <CardContent className="h-[300px] pt-4">
+            {isLoading ? (
+              <div className="h-full w-full flex items-center justify-center text-slate-400">
+                Carregando gráfico...
               </div>
             ) : (
-              <div className="space-y-6">
-                {isProcessingStep4 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center animate-in fade-in duration-300">
-                    <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                    <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
-                      Cruzando Informações...
-                    </h3>
-                    <p className="text-slate-500">
-                      Comparando as contas contábeis e identificando diferenças de saldo.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-400 p-4 rounded-md mb-6 flex items-start gap-3 border border-emerald-100 dark:border-emerald-900/50">
-                      <Check className="h-5 w-5 mt-0.5 shrink-0" />
-                      <div>
-                        <h4 className="font-semibold text-sm">Conciliação Concluída</h4>
-                        <p className="text-sm opacity-90">
-                          Os dados dos balancetes foram processados com sucesso. Veja o resumo
-                          abaixo.
-                        </p>
-                      </div>
-                    </div>
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Resumo de Divergências Encontradas
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <ChartContainer
+                config={{ quantidade: { label: 'Importações', color: 'hsl(var(--primary))' } }}
+                className="h-full w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={timelineData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#64748b"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      dy={10}
+                    />
+                    <YAxis
+                      stroke="#64748b"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <ChartTooltip
+                      content={<ChartTooltipContent />}
+                      cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}
+                    />
+                    <Bar
+                      dataKey="quantidade"
+                      fill="#2563eb"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={50}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
 
-        <div className="flex justify-between items-center mt-8 pt-4">
-          <Button
-            disabled={step === 1 || isProcessing}
-            onClick={handleBack}
-            variant="outline"
-            size="lg"
-            className="w-32"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-
-          {step < 6 ? (
-            <Button
-              disabled={!isStepValid() || isProcessing}
-              onClick={handleNext}
-              size="lg"
-              className="w-32"
-            >
-              Próximo
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              disabled={
-                !(
-                  uploaded[1] &&
-                  uploaded[2] &&
-                  uploaded[3] &&
-                  hasProcessedStep4 &&
-                  uploaded[5] &&
-                  uploaded[6]
-                ) || isProcessing
-              }
-              onClick={handleConfirm}
-              size="lg"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[200px]"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
-                </>
+        <Card className="shadow-sm border-slate-200 flex flex-col">
+          <CardHeader className="pb-4 border-b border-slate-100">
+            <CardTitle className="text-slate-800 font-semibold">Últimas Operações</CardTitle>
+            <CardDescription>Linha do tempo das importações</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 flex-1">
+            <div className="space-y-6">
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-4">
+                      <div className="w-2 h-2 rounded-full bg-slate-200 mt-2 shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-4 bg-slate-100 rounded w-1/2" />
+                        <div className="h-3 bg-slate-50 rounded w-1/3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : recentOps.length === 0 ? (
+                <div className="text-sm text-center text-slate-500 py-8">
+                  Nenhuma operação recente registrada.
+                </div>
               ) : (
-                <>
-                  <Check className="mr-2 h-4 w-4" /> Confirmar Importação
-                </>
+                recentOps.map((op) => (
+                  <div
+                    key={op.id}
+                    className="relative pl-6 pb-6 border-l border-slate-200 last:border-0 last:pb-0"
+                  >
+                    <div className="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-white" />
+                    <div className="flex justify-between items-start mb-1.5">
+                      <span className="text-sm font-semibold text-slate-800">Nova Importação</span>
+                      <time className="text-xs text-slate-500 font-medium whitespace-nowrap ml-2">
+                        {format(new Date(op.created_at), 'dd/MM HH:mm')}
+                      </time>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-100">
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        ID: {op.id.substring(0, 8)}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          op.status === 'COMPLETED'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : op.status === 'ERROR'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {op.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
               )}
-            </Button>
+            </div>
+          </CardContent>
+          {recentOps.length > 0 && (
+            <div className="p-4 border-t border-slate-100 mt-auto">
+              <Button
+                asChild
+                variant="ghost"
+                className="w-full text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+              >
+                <Link to="/history">
+                  Ver todo o histórico <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   )

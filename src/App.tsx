@@ -4,6 +4,8 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
+import ImportPage from './pages/Import'
+import HistoryPage from './pages/History'
 import Results from './pages/Results'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -22,6 +24,8 @@ const App = () => (
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
+            <Route path="/import" element={<ImportPage />} />
+            <Route path="/history" element={<HistoryPage />} />
             <Route path="/results" element={<Results />} />
           </Route>
           <Route path="*" element={<NotFound />} />
