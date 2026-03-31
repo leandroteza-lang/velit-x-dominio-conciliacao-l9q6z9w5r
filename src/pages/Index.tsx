@@ -23,17 +23,33 @@ export default function Dashboard() {
       try {
         setIsLoading(true)
 
-        const [{ count: imports }, { count: conciliations }, { count: entries }] =
-          await Promise.all([
-            supabase.from('importacoes').select('id', { count: 'exact' }).limit(1),
-            supabase.from('conciliacao_balancetes').select('id', { count: 'exact' }).limit(1),
-            supabase.from('lancamentos_dominio').select('id', { count: 'exact' }).limit(1),
-          ])
+        const getCountSafe = async (table: string) => {
+          try {
+            // Utilizamos GET ao invés de HEAD para evitar falhas de parse de JSON vazio
+            const { count, error } = await supabase
+              .from(table)
+              .select('id', { count: 'exact' })
+              .limit(1)
+
+            if (error) {
+              console.warn(`Aviso: falha ao buscar contagem para ${table}:`, error)
+              return 0
+            }
+            return count || 0
+          } catch (err) {
+            console.warn(`Exceção ao buscar contagem para ${table}:`, err)
+            return 0
+          }
+        }
+
+        const imports = await getCountSafe('importacoes')
+        const conciliations = await getCountSafe('conciliacao_balancetes')
+        const entries = await getCountSafe('lancamentos_dominio')
 
         setStats({
-          imports: imports || 0,
-          conciliations: conciliations || 0,
-          entries: entries || 0,
+          imports,
+          conciliations,
+          entries,
         })
 
         const { data: recent } = await supabase
