@@ -317,6 +317,11 @@ export default function ImportPage() {
   }, [fullViewSearch, fullViewStep, previewModalOpen])
 
   const handleViewData = (step: number) => {
+    if (step === 1) {
+      navigate('/cadastros/plano-contas')
+      return
+    }
+
     const card = CARDS.find((c) => c.step === step)
     if (!card) return
 

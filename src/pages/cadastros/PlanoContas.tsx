@@ -138,11 +138,14 @@ export default function PlanoContas() {
   }, [contas])
 
   const filteredContas = useMemo(() => {
+    const searchLower = search.toLowerCase()
+    if (!searchLower) return contas
     return contas.filter(
       (c) =>
-        (c.codigo || '').includes(search) ||
-        (c.nome || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.classificacao || '').includes(search),
+        (c.codigo || '').toLowerCase().includes(searchLower) ||
+        (c.nome || '').toLowerCase().includes(searchLower) ||
+        (c.classificacao || '').toLowerCase().includes(searchLower) ||
+        (c.finalidade || '').toLowerCase().includes(searchLower),
     )
   }, [contas, search])
 
@@ -430,7 +433,7 @@ export default function PlanoContas() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
             <Input
-              placeholder="Buscar por código, classificação ou nome..."
+              placeholder="Buscar por código, classificação, nome ou finalidade..."
               className="pl-9 h-9"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -493,19 +496,40 @@ export default function PlanoContas() {
                 )}
                 {visibleContas.map((conta) => {
                   const levels = conta.classificacao ? conta.classificacao.split('.').length : 0
-                  const isSinteticaVisual = levels <= 4
                   const calculatedLevel = getCalculatedLevel(conta.classificacao)
+
+                  let rowBgClass =
+                    'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                  let textClass = 'text-slate-700 dark:text-slate-300'
+
+                  if (calculatedLevel === 'SINTETICA') {
+                    if (levels === 1) {
+                      rowBgClass =
+                        'bg-blue-900 hover:bg-blue-950 dark:bg-blue-950 dark:hover:bg-blue-950/80'
+                      textClass = 'text-white'
+                    } else if (levels === 2) {
+                      rowBgClass =
+                        'bg-blue-700 hover:bg-blue-800 dark:bg-blue-900 dark:hover:bg-blue-900/80'
+                      textClass = 'text-white'
+                    } else if (levels === 3) {
+                      rowBgClass =
+                        'bg-blue-400 hover:bg-blue-500 dark:bg-blue-800 dark:hover:bg-blue-800/80'
+                      textClass = 'text-blue-950 dark:text-white'
+                    } else if (levels >= 4) {
+                      rowBgClass =
+                        'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60'
+                      textClass = 'text-blue-900 dark:text-blue-100'
+                    }
+                  }
 
                   return (
                     <TableRow
                       key={conta.id}
                       style={{ height: rowHeight }}
                       className={cn(
-                        'hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors group',
-                        'border-b border-slate-300 dark:border-slate-700',
-                        isSinteticaVisual
-                          ? 'bg-blue-50/60 dark:bg-blue-900/20'
-                          : 'bg-white dark:bg-slate-900',
+                        'transition-colors group',
+                        'border-b border-slate-400 dark:border-slate-600',
+                        rowBgClass,
                       )}
                     >
                       <TableCell className="text-center px-2 py-1.5">
@@ -516,15 +540,31 @@ export default function PlanoContas() {
                             const isShift = (window.event as MouseEvent)?.shiftKey || false
                             toggleSelect(conta.id, isShift)
                           }}
+                          className={cn(
+                            textClass.includes('text-white') &&
+                              'border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-blue-900',
+                          )}
                         />
                       </TableCell>
-                      <TableCell className="font-medium text-slate-700 dark:text-slate-300 text-xs px-2 py-1.5 whitespace-nowrap">
+                      <TableCell
+                        className={cn(
+                          'font-medium text-xs px-2 py-1.5 whitespace-nowrap',
+                          textClass,
+                        )}
+                      >
                         {conta.codigo}
                       </TableCell>
-                      <TableCell className="text-xs px-2 py-1.5 whitespace-nowrap font-mono">
+                      <TableCell
+                        className={cn('text-xs px-2 py-1.5 whitespace-nowrap font-mono', textClass)}
+                      >
                         {conta.classificacao}
                       </TableCell>
-                      <TableCell className="text-sm px-2 py-1.5 max-w-[200px] md:max-w-[400px]">
+                      <TableCell
+                        className={cn(
+                          'text-sm px-2 py-1.5 max-w-[200px] md:max-w-[400px]',
+                          textClass,
+                        )}
+                      >
                         <div className="truncate w-full">
                           {conta.finalidade ? (
                             <Tooltip delayDuration={300}>
@@ -533,7 +573,7 @@ export default function PlanoContas() {
                               </TooltipTrigger>
                               <TooltipContent
                                 side="right"
-                                className="max-w-xs whitespace-normal bg-slate-800 text-white"
+                                className="max-w-xs whitespace-normal bg-slate-800 text-white border-slate-700"
                               >
                                 <p className="font-semibold text-xs mb-1">Finalidade:</p>
                                 <p className="text-xs text-slate-200">{conta.finalidade}</p>
@@ -558,7 +598,7 @@ export default function PlanoContas() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs px-2 py-1.5 text-slate-600 font-medium">
+                      <TableCell className={cn('text-xs px-2 py-1.5 font-medium', textClass)}>
                         {conta.natureza || '-'}
                       </TableCell>
                       <TableCell className="text-right px-2 py-1.5">
@@ -566,18 +606,23 @@ export default function PlanoContas() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-6 w-6 hover:bg-black/10 dark:hover:bg-white/10"
                             onClick={() => openEdit(conta)}
                           >
-                            <Edit className="w-3.5 h-3.5 text-slate-500 hover:text-primary" />
+                            <Edit
+                              className={cn(
+                                'w-3.5 h-3.5',
+                                textClass.includes('text-white') ? 'text-white' : 'text-slate-500',
+                              )}
+                            />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-6 w-6 hover:bg-black/10 dark:hover:bg-white/10"
                             onClick={() => handleDeleteIndividual(conta.id)}
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
+                            <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-500" />
                           </Button>
                         </div>
                       </TableCell>
