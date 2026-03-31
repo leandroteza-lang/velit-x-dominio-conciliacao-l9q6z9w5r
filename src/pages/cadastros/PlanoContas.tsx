@@ -209,51 +209,122 @@ export default function PlanoContas() {
   const topSpacer = startIndex * rowHeight
   const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
 
-  const handleExport = () => {
-    if (sortedContas.length === 0) {
-      toast.error('Não há contas para exportar.')
-      return
-    }
-
-    const headers = ['Código', 'Classificação', 'Nome', 'Nível', 'Tipo', 'Natureza', 'Finalidade']
-    const csvContent = [
-      headers.join(';'),
-      ...sortedContas.map((c) => {
-        const nivel = getCalculatedLevel(c.classificacao)
-        return [
-          c.codigo || '',
-          c.classificacao || '',
-          `"${(c.nome || '').replace(/"/g, '""')}"`,
-          nivel,
-          c.tipo || '',
-          c.natureza || '',
-          `"${(c.finalidade || '').replace(/"/g, '""')}"`,
-        ].join(';')
-      }),
-    ].join('\n')
-
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `plano_contas_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
+  const logExport = (format: string) => {
     if (user) {
       supabase
         .from('export_history')
         .insert([
           {
             user_id: user.id,
-            file_name: `plano_contas_${new Date().toISOString().split('T')[0]}.csv`,
+            file_name: `plano_contas_${new Date().toISOString().split('T')[0]}.${format.toLowerCase()}`,
             type: 'PLANO_CONTAS',
             records_count: sortedContas.length,
           },
         ])
         .then()
+    }
+  }
+
+  const handleExport = (format: 'CSV' | 'PDF' | 'BROWSER') => {
+    if (sortedContas.length === 0) {
+      toast.error('Não há contas para exportar.')
+      return
+    }
+
+    if (format === 'CSV') {
+      const headers = ['Código', 'Classificação', 'Nome', 'Nível', 'Tipo', 'Natureza', 'Finalidade']
+      const csvContent = [
+        headers.join(';'),
+        ...sortedContas.map((c) => {
+          const nivel = getCalculatedLevel(c.classificacao)
+          return [
+            c.codigo || '',
+            c.classificacao || '',
+            `"${(c.nome || '').replace(/"/g, '""')}"`,
+            nivel,
+            c.tipo || '',
+            c.natureza || '',
+            `"${(c.finalidade || '').replace(/"/g, '""')}"`,
+          ].join(';')
+        }),
+      ].join('\n')
+
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `plano_contas_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      logExport('CSV')
+    } else {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Plano de Contas</title>
+          <style>
+            body { font-family: sans-serif; font-size: 12px; margin: 20px; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+            th { background-color: #f4f4f4; font-weight: bold; }
+            h1 { font-size: 18px; margin-bottom: 5px; }
+            .meta { font-size: 11px; color: #666; margin-bottom: 20px; }
+            .sintetica { background-color: #f9fafb; font-weight: 600; }
+            @media print {
+              body { margin: 0; }
+              table { page-break-inside: auto; }
+              tr { page-break-inside: avoid; page-break-after: auto; }
+              thead { display: table-header-group; }
+              tfoot { display: table-footer-group; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Plano de Contas</h1>
+          <div class="meta">Exportado em: ${new Date().toLocaleString('pt-BR')} | Total de contas: ${sortedContas.length}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Classificação</th>
+                <th>Nome</th>
+                <th>Nível</th>
+                <th>Tipo</th>
+                <th>Natureza</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sortedContas
+                .map((c) => {
+                  const nivel = getCalculatedLevel(c.classificacao)
+                  const isSintetica = nivel === 'SINTETICA'
+                  return `<tr class="${isSintetica ? 'sintetica' : ''}">
+                  <td>${c.codigo || ''}</td>
+                  <td>${c.classificacao || ''}</td>
+                  <td>${c.nome || ''}</td>
+                  <td>${nivel}</td>
+                  <td>${c.tipo || ''}</td>
+                  <td>${c.natureza || ''}</td>
+                </tr>`
+                })
+                .join('')}
+            </tbody>
+          </table>
+          ${format === 'PDF' ? '<script>window.onload = function() { window.print(); }</script>' : ''}
+        </body>
+        </html>
+      `
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank')
+      if (!win) {
+        toast.error('O navegador bloqueou a abertura da nova aba. Permita pop-ups para este site.')
+        return
+      }
+      logExport(format)
     }
   }
 
@@ -317,7 +388,7 @@ export default function PlanoContas() {
       }
 
       if (allIdsToDelete.length > 0) {
-        const DELETE_BATCH_SIZE = 100 // Limite seguro para não estourar o tamanho da URL
+        const DELETE_BATCH_SIZE = 40 // Limite seguro menor para garantir URL dentro do tamanho
         for (let i = 0; i < allIdsToDelete.length; i += DELETE_BATCH_SIZE) {
           const batch = allIdsToDelete.slice(i, i + DELETE_BATCH_SIZE)
           const { error: deleteError } = await supabase
@@ -390,7 +461,7 @@ export default function PlanoContas() {
     if (!confirm(`Excluir ${selected.size} contas selecionadas?`)) return
 
     const selectedIds = Array.from(selected)
-    const DELETE_BATCH_SIZE = 100
+    const DELETE_BATCH_SIZE = 40
     for (let i = 0; i < selectedIds.length; i += DELETE_BATCH_SIZE) {
       const batch = selectedIds.slice(i, i + DELETE_BATCH_SIZE)
       const { error } = await supabase.from('plano_contas').delete().in('id', batch)
@@ -627,13 +698,27 @@ export default function PlanoContas() {
             Desfazer Importação
           </Button>
 
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            className="bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-          >
-            <Download className="w-4 h-4 mr-2" /> Exportar
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+              >
+                <Download className="w-4 h-4 mr-2" /> Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport('CSV')}>
+                Exportar como CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('PDF')}>
+                Exportar como PDF (Imprimir)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('BROWSER')}>
+                Visualizar no Navegador
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button onClick={openNew}>
             <Plus className="w-4 h-4 mr-2" /> Adicionar Conta
@@ -696,8 +781,18 @@ export default function PlanoContas() {
                     Nome <SortIcon columnKey="nome" />
                   </TableHead>
                   <TableHead className="w-24 px-2 py-2">Nível</TableHead>
-                  <TableHead className="w-24 px-2 py-2">Tipo</TableHead>
-                  <TableHead className="w-28 px-2 py-2">Natureza</TableHead>
+                  <TableHead
+                    className="w-24 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                    onClick={() => handleSort('tipo')}
+                  >
+                    Tipo <SortIcon columnKey="tipo" />
+                  </TableHead>
+                  <TableHead
+                    className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                    onClick={() => handleSort('natureza')}
+                  >
+                    Natureza <SortIcon columnKey="natureza" />
+                  </TableHead>
                   <TableHead className="w-16 px-2 py-2 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>

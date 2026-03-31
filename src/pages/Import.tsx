@@ -31,6 +31,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
 import { PreviewTable } from '@/components/PreviewTable'
 import {
   Table,
@@ -131,6 +132,8 @@ export default function ImportPage() {
     data: any | null
     isProcessing: boolean
   }>({ open: false, data: null, isProcessing: false })
+
+  const [importProgress, setImportProgress] = useState(0)
 
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -252,6 +255,8 @@ export default function ImportPage() {
   ) => {
     if (!user) throw new Error('Usuário não autenticado')
 
+    setImportProgress(10)
+
     const { data: currentData, error: fetchErr } = await supabase
       .from('plano_contas')
       .select('*')
@@ -261,12 +266,16 @@ export default function ImportPage() {
 
     const currentAccounts = currentData || []
 
+    setImportProgress(20)
+
     if (currentAccounts.length > 0) {
       await supabase.from('plano_contas_backup' as any).insert({
         user_id: user.id,
         data: currentAccounts,
       })
     }
+
+    setImportProgress(30)
 
     const mergeInheritedFields = (newRow: any, existingRow: any) => {
       return {
@@ -314,11 +323,19 @@ export default function ImportPage() {
       return obj
     })
 
-    for (let i = 0; i < toInsert.length; i += 500) {
+    setImportProgress(40)
+
+    const total = toInsert.length
+    for (let i = 0; i < total; i += 500) {
       const chunk = toInsert.slice(i, i + 500)
       const { error: insErr } = await supabase.from('plano_contas').insert(chunk)
       if (insErr) throw insErr
+
+      const p = 40 + Math.round(((i + chunk.length) / total) * 60)
+      setImportProgress(p > 100 ? 100 : p)
     }
+
+    setImportProgress(100)
   }
 
   const handlePcImportAction = async (action: 'ADD_NEW' | 'UPDATE_EXISTING' | 'REPLACE_ALL') => {
@@ -749,6 +766,16 @@ export default function ImportPage() {
               </span>
             </Button>
           </div>
+
+          {pcImportDialog.isProcessing && (
+            <div className="py-4 space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Processando importação...</span>
+                <span>{importProgress}%</span>
+              </div>
+              <Progress value={importProgress} />
+            </div>
+          )}
 
           <DialogFooter>
             <Button
