@@ -137,16 +137,50 @@ export default function PlanoContas() {
     return standardClassificacao ? standardClassificacao.split('.').map((p) => p.length) : null
   }, [contas])
 
+  const normalize = (str?: string) =>
+    (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+
   const filteredContas = useMemo(() => {
-    const searchLower = search.toLowerCase()
-    if (!searchLower) return contas
-    return contas.filter(
-      (c) =>
-        (c.codigo || '').toLowerCase().includes(searchLower) ||
-        (c.nome || '').toLowerCase().includes(searchLower) ||
-        (c.classificacao || '').toLowerCase().includes(searchLower) ||
-        (c.finalidade || '').toLowerCase().includes(searchLower),
-    )
+    const searchNorm = normalize(search)
+    if (!searchNorm) return contas
+
+    const directMatches = new Set<string>()
+    const parentsToAdd = new Set<string>()
+
+    contas.forEach((c) => {
+      const matchName = normalize(c.nome).includes(searchNorm)
+      const matchFinalidade = normalize(c.finalidade).includes(searchNorm)
+      const matchCod = normalize(c.codigo).includes(searchNorm)
+      const matchClass = normalize(c.classificacao).includes(searchNorm)
+
+      if (matchName || matchFinalidade || matchCod || matchClass) {
+        directMatches.add(c.id)
+
+        if (c.classificacao) {
+          const parts = c.classificacao.split('.')
+          let current = ''
+          for (let i = 0; i < parts.length - 1; i++) {
+            current = current ? `${current}.${parts[i]}` : parts[i]
+            parentsToAdd.add(current)
+          }
+        }
+      }
+    })
+
+    const syntheticPrefixes = contas
+      .filter((c) => directMatches.has(c.id) && c.nivel_tipo === 'SINTETICA')
+      .map((c) => c.classificacao + '.')
+
+    return contas.filter((c) => {
+      if (directMatches.has(c.id)) return true
+      if (c.classificacao && parentsToAdd.has(c.classificacao)) return true
+      if (c.classificacao && syntheticPrefixes.some((prefix) => c.classificacao.startsWith(prefix)))
+        return true
+      return false
+    })
   }, [contas, search])
 
   const sortedContas = useMemo(() => {
@@ -499,28 +533,37 @@ export default function PlanoContas() {
                   const calculatedLevel = getCalculatedLevel(conta.classificacao)
 
                   let rowBgClass =
-                    'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                    'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80'
                   let textClass = 'text-slate-700 dark:text-slate-300'
+                  let borderClass = 'border-b border-slate-200 dark:border-slate-800'
 
                   if (calculatedLevel === 'SINTETICA') {
                     if (levels === 1) {
                       rowBgClass =
-                        'bg-blue-900 hover:bg-blue-950 dark:bg-blue-950 dark:hover:bg-blue-950/80'
+                        'bg-blue-950 hover:bg-blue-900 dark:bg-blue-950 dark:hover:bg-blue-900/80'
                       textClass = 'text-white'
+                      borderClass = 'border-b border-blue-900/50 dark:border-blue-800'
                     } else if (levels === 2) {
                       rowBgClass =
-                        'bg-blue-700 hover:bg-blue-800 dark:bg-blue-900 dark:hover:bg-blue-900/80'
+                        'bg-blue-800 hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800/80'
                       textClass = 'text-white'
+                      borderClass = 'border-b border-blue-700/50 dark:border-blue-700/50'
                     } else if (levels === 3) {
                       rowBgClass =
-                        'bg-blue-400 hover:bg-blue-500 dark:bg-blue-800 dark:hover:bg-blue-800/80'
-                      textClass = 'text-blue-950 dark:text-white'
+                        'bg-blue-500 hover:bg-blue-600 dark:bg-blue-800 dark:hover:bg-blue-700/80'
+                      textClass = 'text-white'
+                      borderClass = 'border-b border-blue-400/50 dark:border-blue-600/50'
                     } else if (levels >= 4) {
                       rowBgClass =
-                        'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60'
-                      textClass = 'text-blue-900 dark:text-blue-100'
+                        'bg-blue-200 hover:bg-blue-300 dark:bg-blue-900/40 dark:hover:bg-blue-900/60'
+                      textClass = 'text-blue-950 dark:text-blue-100'
+                      borderClass = 'border-b border-blue-300/50 dark:border-blue-800/50'
                     }
                   }
+
+                  const isMatch =
+                    search &&
+                    normalize(conta.nome + ' ' + conta.finalidade).includes(normalize(search))
 
                   return (
                     <TableRow
@@ -528,8 +571,11 @@ export default function PlanoContas() {
                       style={{ height: rowHeight }}
                       className={cn(
                         'transition-colors group',
-                        'border-b border-slate-400 dark:border-slate-600',
+                        borderClass,
                         rowBgClass,
+                        isMatch &&
+                          calculatedLevel !== 'SINTETICA' &&
+                          'ring-1 ring-inset ring-primary/50 bg-primary/5 dark:bg-primary/10',
                       )}
                     >
                       <TableCell className="text-center px-2 py-1.5">
