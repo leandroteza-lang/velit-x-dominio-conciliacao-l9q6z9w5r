@@ -1,58 +1,45 @@
-import { UploadCloud, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { useRef } from 'react'
+import { UploadCloud } from 'lucide-react'
 
 interface UploadZoneProps {
   title: string
   description: string
   isUploaded: boolean
-  onUpload: () => void
-  iconColor?: string
+  onUpload: (file: File) => void
 }
 
-export const UploadZone = ({
-  title,
-  description,
-  isUploaded,
-  onUpload,
-  iconColor = 'text-primary',
-}: UploadZoneProps) => {
+export function UploadZone({ title, description, isUploaded, onUpload }: UploadZoneProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      onUpload(file)
+    }
+  }
+
   return (
-    <Card
-      className={cn(
-        'relative overflow-hidden transition-all duration-300 border-2 border-dashed',
-        isUploaded
-          ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20'
-          : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:border-primary/50 dark:hover:bg-slate-900',
-        'cursor-pointer w-full max-w-2xl mx-auto',
-      )}
-      onClick={onUpload}
+    <div
+      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isUploaded ? 'border-emerald-500 bg-emerald-500/5' : 'border-muted hover:border-primary/50'}`}
+      onClick={() => fileInputRef.current?.click()}
     >
-      <CardHeader className="text-center pb-2">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 transition-colors">
-          {isUploaded ? (
-            <CheckCircle2 className="h-8 w-8 text-emerald-500 animate-in zoom-in duration-300" />
-          ) : (
-            <UploadCloud className={cn('h-8 w-8', iconColor)} />
-          )}
-        </div>
-        <CardTitle className="text-xl">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="text-center pb-8">
-        {isUploaded ? (
-          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 animate-in fade-in">
-            Arquivo carregado e validado com sucesso
-          </p>
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-sm text-slate-500">
-            <span className="flex items-center gap-1.5 font-medium">
-              <FileSpreadsheet className="h-4 w-4" /> CSV, XLS ou XLSX
-            </span>
-            <span>Clique para selecionar ou arraste e solte o arquivo aqui</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      <input
+        type="file"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv,.xlsx,.xls,.txt"
+      />
+      <UploadCloud
+        className={`mx-auto h-12 w-12 mb-4 transition-colors ${isUploaded ? 'text-emerald-500' : 'text-muted-foreground'}`}
+      />
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+      {isUploaded && (
+        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-4">
+          Arquivo processado com sucesso
+        </p>
+      )}
+    </div>
   )
 }

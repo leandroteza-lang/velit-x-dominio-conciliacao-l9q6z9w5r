@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Check, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import { UploadZone } from '@/components/UploadZone'
 import { PreviewTable } from '@/components/PreviewTable'
-import { getMockData } from '@/lib/mock-data'
 import { toast } from 'sonner'
 import { useReconciliationStore } from '@/stores/useReconciliationStore'
 
@@ -56,7 +55,14 @@ export default function Index() {
   const [hasProcessedStep4, setHasProcessedStep4] = useState(false)
 
   const navigate = useNavigate()
-  const { processData, isProcessing, reset } = useReconciliationStore()
+  const {
+    processData,
+    isProcessing,
+    reset,
+    uploadFile,
+    processConciliacaoBalancetes,
+    previewData,
+  } = useReconciliationStore()
 
   useEffect(() => {
     reset()
@@ -65,20 +71,29 @@ export default function Index() {
   useEffect(() => {
     if (step === 4 && !hasProcessedStep4) {
       setIsProcessingStep4(true)
-      const timer = setTimeout(() => {
-        setIsProcessingStep4(false)
-        setHasProcessedStep4(true)
-      }, 1500)
-      return () => clearTimeout(timer)
+      processConciliacaoBalancetes()
+        .then(() => {
+          setIsProcessingStep4(false)
+          setHasProcessedStep4(true)
+        })
+        .catch((err) => {
+          toast.error('Erro ao processar conciliação: ' + err.message)
+          setIsProcessingStep4(false)
+        })
     }
-  }, [step, hasProcessedStep4])
+  }, [step, hasProcessedStep4, processConciliacaoBalancetes])
 
   const currentStep = STEPS[step - 1]
   const progress = (step / STEPS.length) * 100
 
-  const handleUpload = () => {
-    setUploaded((prev) => ({ ...prev, [step]: true }))
-    toast.success('Arquivo carregado com sucesso!')
+  const handleUpload = async (file: File) => {
+    try {
+      await uploadFile(step, file)
+      setUploaded((prev) => ({ ...prev, [step]: true }))
+      toast.success('Arquivo salvo no banco de dados!')
+    } catch (err: any) {
+      toast.error('Erro ao salvar: ' + err.message)
+    }
   }
 
   const handleNext = () => {
@@ -180,10 +195,7 @@ export default function Index() {
                       Pré-visualização de Dados (Primeiras 10 linhas)
                     </h3>
                     <div className="overflow-x-auto">
-                      <PreviewTable
-                        headers={currentStep.headers}
-                        data={getMockData(currentStep.key)}
-                      />
+                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
                     </div>
                   </div>
                 )}
@@ -216,10 +228,7 @@ export default function Index() {
                       Resumo de Divergências Encontradas
                     </h3>
                     <div className="overflow-x-auto">
-                      <PreviewTable
-                        headers={currentStep.headers}
-                        data={getMockData(currentStep.key)}
-                      />
+                      <PreviewTable headers={currentStep.headers} data={previewData[step] || []} />
                     </div>
                   </div>
                 )}

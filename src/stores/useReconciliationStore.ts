@@ -1,149 +1,231 @@
 import { create } from 'zustand'
+import { supabase } from '@/lib/supabase/client'
 import { ComparisonRecord, ReconciliationSummary } from '@/types/reconciliation'
 
 interface ReconciliationStore {
+  importacaoId: string | null
+  previewData: Record<number, any[]>
   isProcessing: boolean
   hasData: boolean
   results: ComparisonRecord[]
   summary: ReconciliationSummary | null
+  uploadFile: (step: number, file: File) => Promise<void>
+  processConciliacaoBalancetes: () => Promise<void>
   processData: () => Promise<void>
   reset: () => void
 }
 
-const generateMockData = () => {
-  const mockResults: ComparisonRecord[] = []
-  let velitCount = 0
-  let dominioCount = 0
-  let matchCount = 0
-  let discrepancyCount = 0
+function generateStepData(step: number, importacaoId: string) {
+  switch (step) {
+    case 1: // Plano de Contas
+      return Array.from({ length: 15 }).map((_, i) => ({
+        importacao_id: importacaoId,
+        codigo: `1.01.${i + 1}`,
+        classificacao: 'Ativo',
+        nome: `Conta Exemplo ${i + 1}`,
+        descricao: 'Conta simulada do plano de contas',
+        mascara: `1.01.${(i + 1).toString().padStart(2, '0')}`,
+      }))
+    case 2: // Balancete Domínio
+      return Array.from({ length: 15 }).map((_, i) => ({
+        importacao_id: importacaoId,
+        codigo: `1.01.${i + 1}`,
+        classificacao: 'Ativo',
+        saldo_anterior: 1000 + i * 150,
+        debito: 800,
+        credito: 200,
+        saldo_atual: 1600 + i * 150,
+      }))
+    case 3: // Balancete VELIT
+      return Array.from({ length: 15 }).map((_, i) => {
+        // Force a discrepancy on the 3rd and 7th item
+        const isDiscrepancy = i === 2 || i === 6
+        const saldo_atual = isDiscrepancy ? 1600 + i * 150 + 200 : 1600 + i * 150
 
-  const addRecord = (base: Partial<ComparisonRecord>, status: ComparisonRecord['status']) => {
-    const record: ComparisonRecord = {
-      id: Math.random().toString(36).substring(7),
-      date: base.date || '2023-10-01',
-      description: base.description || 'Sample Transaction',
-      velitValue: base.velitValue ?? null,
-      dominioValue: base.dominioValue ?? null,
-      difference: (base.velitValue || 0) - (base.dominioValue || 0),
-      status,
-    }
-    mockResults.push(record)
-    if (record.velitValue !== null) velitCount++
-    if (record.dominioValue !== null) dominioCount++
-    if (status === 'MATCHED') matchCount++
-    else discrepancyCount++
-  }
-
-  // Generate Matches
-  for (let i = 1; i <= 15; i++) {
-    const val = 100 * i + 50.25
-    addRecord(
-      {
-        date: `2023-10-${i.toString().padStart(2, '0')}`,
-        description: `Faturamento NF-${1000 + i}`,
-        velitValue: val,
-        dominioValue: val,
-      },
-      'MATCHED',
-    )
-  }
-
-  // Generate Mismatches
-  addRecord(
-    {
-      date: '2023-10-05',
-      description: 'Taxa Administrativa',
-      velitValue: 1500.0,
-      dominioValue: 150.0,
-    },
-    'MISMATCH',
-  )
-  addRecord(
-    {
-      date: '2023-10-12',
-      description: 'Pagamento Fornecedor X',
-      velitValue: 3450.5,
-      dominioValue: 3450.0,
-    },
-    'MISMATCH',
-  )
-  addRecord(
-    {
-      date: '2023-10-18',
-      description: 'Serviços Prestados',
-      velitValue: 890.0,
-      dominioValue: 980.0,
-    },
-    'MISMATCH',
-  )
-
-  // Generate Missing in Velit
-  addRecord(
-    {
-      date: '2023-10-08',
-      description: 'Ajuste Manual Domínio',
-      velitValue: null,
-      dominioValue: 450.0,
-    },
-    'MISSING_VELIT',
-  )
-  addRecord(
-    {
-      date: '2023-10-22',
-      description: 'Estorno Não Lançado',
-      velitValue: null,
-      dominioValue: -120.0,
-    },
-    'MISSING_VELIT',
-  )
-
-  // Generate Missing in Domínio
-  addRecord(
-    {
-      date: '2023-10-15',
-      description: 'Venda Dinheiro PDV',
-      velitValue: 320.0,
-      dominioValue: null,
-    },
-    'MISSING_DOMINIO',
-  )
-  addRecord(
-    {
-      date: '2023-10-25',
-      description: 'Recebimento PIX Avulso',
-      velitValue: 150.0,
-      dominioValue: null,
-    },
-    'MISSING_DOMINIO',
-  )
-
-  return {
-    results: mockResults.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    summary: {
-      totalVelit: velitCount,
-      totalDominio: dominioCount,
-      matches: matchCount,
-      discrepancies: discrepancyCount,
-    },
+        return {
+          importacao_id: importacaoId,
+          conta_contabil: `1.01.${i + 1}`,
+          descricao: `Conta Exemplo ${i + 1}`,
+          saldo_anterior: 1000 + i * 150,
+          debito: 800 + (isDiscrepancy ? 200 : 0),
+          credito: 200,
+          saldo_atual,
+        }
+      })
+    case 5: // Razão Domínio
+      return Array.from({ length: 15 }).map((_, i) => ({
+        importacao_id: importacaoId,
+        conta: `1.01.${i + 1}`,
+        data: `2023-10-${(i + 1).toString().padStart(2, '0')}`,
+        historico: `Lançamento de histórico Domínio ${i + 1}`,
+        debito: 100 * i,
+        credito: 50 * i,
+        saldo: 50 * i,
+      }))
+    case 6: // Razão VELIT
+      return Array.from({ length: 15 }).map((_, i) => ({
+        importacao_id: importacaoId,
+        conta: `1.01.${i + 1}`,
+        data: `2023-10-${(i + 1).toString().padStart(2, '0')}`,
+        historico: `Lançamento de histórico Velit ${i + 1}`,
+        debito: 100 * i,
+        credito: 50 * i,
+        saldo: 50 * i,
+      }))
+    default:
+      return []
   }
 }
 
-export const useReconciliationStore = create<ReconciliationStore>((set) => ({
+export const useReconciliationStore = create<ReconciliationStore>((set, get) => ({
+  importacaoId: null,
+  previewData: {},
   isProcessing: false,
   hasData: false,
   results: [],
   summary: null,
+
+  uploadFile: async (step, _file) => {
+    let { importacaoId } = get()
+
+    if (!importacaoId) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error('Usuário não autenticado')
+      const { data, error } = await supabase
+        .from('importacoes')
+        .insert({ user_id: user.id })
+        .select()
+        .single()
+      if (error) throw error
+      importacaoId = data.id
+      set({ importacaoId })
+    }
+
+    const tableNames: Record<number, string> = {
+      1: 'plano_contas',
+      2: 'balancete_dominio',
+      3: 'balancete_velit',
+      5: 'razao_dominio',
+      6: 'razao_velit',
+    }
+    const tableName = tableNames[step]
+    if (!tableName) return
+
+    // Generating DB valid structure simulating a parsed CSV/XLSX
+    const dataToInsert = generateStepData(step, importacaoId)
+
+    // Clear old data for this import & step
+    await supabase.from(tableName).delete().eq('importacao_id', importacaoId)
+
+    const { error } = await supabase.from(tableName).insert(dataToInsert)
+    if (error) throw error
+
+    const { data: preview } = await supabase
+      .from(tableName)
+      .select('*')
+      .eq('importacao_id', importacaoId)
+      .limit(10)
+      .order('id')
+
+    set((state) => ({
+      previewData: { ...state.previewData, [step]: preview || [] },
+    }))
+  },
+
+  processConciliacaoBalancetes: async () => {
+    const { importacaoId } = get()
+    if (!importacaoId) return
+
+    const { data: bDominio } = await supabase
+      .from('balancete_dominio')
+      .select('*')
+      .eq('importacao_id', importacaoId)
+      .order('codigo')
+    const { data: bVelit } = await supabase
+      .from('balancete_velit')
+      .select('*')
+      .eq('importacao_id', importacaoId)
+      .order('conta_contabil')
+
+    await supabase.from('conciliacao_balancetes').delete().eq('importacao_id', importacaoId)
+
+    const concData =
+      bDominio?.map((d) => {
+        const v = bVelit?.find((v) => v.conta_contabil === d.codigo)
+        const dif = (d.saldo_atual || 0) - (v?.saldo_atual || 0)
+        return {
+          importacao_id: importacaoId,
+          conta_contabil: d.codigo,
+          descricao: d.classificacao,
+          saldo_dominio: d.saldo_atual,
+          saldo_velit: v?.saldo_atual || 0,
+          diferenca: dif,
+          status: dif === 0 ? 'OK' : 'DIVERGENCIA',
+        }
+      }) || []
+
+    if (concData.length > 0) {
+      const { error } = await supabase.from('conciliacao_balancetes').insert(concData)
+      if (error) throw error
+    }
+
+    const { data: preview } = await supabase
+      .from('conciliacao_balancetes')
+      .select('*')
+      .eq('importacao_id', importacaoId)
+      .limit(10)
+      .order('conta_contabil')
+
+    set((state) => ({
+      previewData: { ...state.previewData, 4: preview || [] },
+    }))
+  },
+
   processData: async () => {
     set({ isProcessing: true })
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    const data = generateMockData()
-    set({
-      isProcessing: false,
-      hasData: true,
-      results: data.results,
-      summary: data.summary,
-    })
+    const { importacaoId } = get()
+    if (!importacaoId) {
+      set({ isProcessing: false })
+      return
+    }
+
+    const { data: dbResults } = await supabase
+      .from('conciliacao_balancetes')
+      .select('*')
+      .eq('importacao_id', importacaoId)
+      .order('conta_contabil')
+
+    const mappedResults: ComparisonRecord[] = (dbResults || []).map((r) => ({
+      id: r.id,
+      date: new Date().toISOString().split('T')[0],
+      description: r.descricao || 'N/A',
+      velitValue: r.saldo_velit,
+      dominioValue: r.saldo_dominio,
+      difference: r.diferenca,
+      status: r.status === 'OK' ? 'MATCHED' : 'MISMATCH',
+    }))
+
+    const summary: ReconciliationSummary = {
+      totalVelit: mappedResults.filter((r) => r.velitValue !== null).length,
+      totalDominio: mappedResults.filter((r) => r.dominioValue !== null).length,
+      matches: mappedResults.filter((r) => r.status === 'MATCHED').length,
+      discrepancies: mappedResults.filter((r) => r.status !== 'MATCHED').length,
+    }
+
+    await supabase.from('importacoes').update({ status: 'COMPLETED' }).eq('id', importacaoId)
+
+    set({ isProcessing: false, hasData: true, results: mappedResults, summary })
   },
-  reset: () => set({ isProcessing: false, hasData: false, results: [], summary: null }),
+
+  reset: () =>
+    set({
+      importacaoId: null,
+      previewData: {},
+      isProcessing: false,
+      hasData: false,
+      results: [],
+      summary: null,
+    }),
 }))
