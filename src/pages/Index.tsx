@@ -25,9 +25,9 @@ export default function Dashboard() {
 
         const [{ count: imports }, { count: conciliations }, { count: entries }] =
           await Promise.all([
-            supabase.from('importacoes').select('*', { count: 'exact', head: true }),
-            supabase.from('conciliacao_balancetes').select('*', { count: 'exact', head: true }),
-            supabase.from('lancamentos_dominio').select('*', { count: 'exact', head: true }),
+            supabase.from('importacoes').select('id', { count: 'exact' }).limit(1),
+            supabase.from('conciliacao_balancetes').select('id', { count: 'exact' }).limit(1),
+            supabase.from('lancamentos_dominio').select('id', { count: 'exact' }).limit(1),
           ])
 
         setStats({

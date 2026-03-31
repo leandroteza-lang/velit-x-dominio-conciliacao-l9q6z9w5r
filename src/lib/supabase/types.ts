@@ -287,33 +287,45 @@ export type Database = {
       razao_dominio: {
         Row: {
           conta: string | null
+          contra: string | null
           credito: number | null
           data: string | null
           debito: number | null
           historico: string | null
           id: string
           importacao_id: string
+          linha_cliente: string | null
+          partida: string | null
           saldo: number | null
+          status: string | null
         }
         Insert: {
           conta?: string | null
+          contra?: string | null
           credito?: number | null
           data?: string | null
           debito?: number | null
           historico?: string | null
           id?: string
           importacao_id: string
+          linha_cliente?: string | null
+          partida?: string | null
           saldo?: number | null
+          status?: string | null
         }
         Update: {
           conta?: string | null
+          contra?: string | null
           credito?: number | null
           data?: string | null
           debito?: number | null
           historico?: string | null
           id?: string
           importacao_id?: string
+          linha_cliente?: string | null
+          partida?: string | null
           saldo?: number | null
+          status?: string | null
         }
         Relationships: [
           {
@@ -608,6 +620,10 @@ export const Constants = {
 //   debito: numeric (nullable)
 //   credito: numeric (nullable)
 //   saldo: numeric (nullable)
+//   partida: text (nullable)
+//   contra: text (nullable)
+//   status: text (nullable)
+//   linha_cliente: text (nullable)
 // Table: razao_velit
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
