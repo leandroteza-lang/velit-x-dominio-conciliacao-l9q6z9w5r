@@ -27,7 +27,9 @@ import {
   AlertCircle,
   RefreshCw,
   Database,
+  Search,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { PreviewTable } from '@/components/PreviewTable'
 import { toast } from 'sonner'
 import { useReconciliationStore } from '@/stores/useReconciliationStore'
@@ -97,6 +99,9 @@ export default function ImportPage() {
   const [previewData, setPreviewData] = useState<any[]>([])
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([])
   const [previewTitle, setPreviewTitle] = useState('')
+  const [fullViewStep, setFullViewStep] = useState<number | null>(null)
+  const [fullViewSearch, setFullViewSearch] = useState('')
+  const [isLoadingFullView, setIsLoadingFullView] = useState(false)
 
   const [replaceDialog, setReplaceDialog] = useState<{ open: boolean; step: number | null }>({
     open: false,
@@ -194,19 +199,40 @@ export default function ImportPage() {
     }
   }
 
-  const handleViewData = async (step: number) => {
+  const fetchFullData = async (step: number, search: string) => {
     if (!importacao) return
     const card = CARDS.find((c) => c.step === step)
     if (!card) return
 
+    setIsLoadingFullView(true)
     try {
-      const { data } = await supabase
-        .from(card.table)
+      let query = supabase
+        .from(card.table as any)
         .select(card.columns.join(','))
         .eq('importacao_id', importacao.id)
-        .limit(10)
+        .limit(1000)
 
-      const mappedData = (data || []).map((row) => {
+      if (search) {
+        const textColumns = card.columns.filter((c) =>
+          [
+            'conta_contabil',
+            'descricao',
+            'codigo',
+            'classificacao',
+            'conta',
+            'historico',
+            'nome',
+          ].includes(c),
+        )
+        if (textColumns.length > 0) {
+          const orQuery = textColumns.map((c) => `${c}.ilike.%${search}%`).join(',')
+          query = query.or(orQuery)
+        }
+      }
+
+      const { data } = await query
+
+      const mappedData = (data || []).map((row: any) => {
         const newObj: any = {}
         card.columns.forEach((col) => {
           newObj[col] = row[col]
@@ -215,12 +241,34 @@ export default function ImportPage() {
       })
 
       setPreviewData(mappedData)
-      setPreviewHeaders(card.headers)
-      setPreviewTitle(`Pré-visualização: ${card.title}`)
-      setPreviewModalOpen(true)
     } catch (err: any) {
       toast.error('Erro ao carregar dados: ' + err.message)
+    } finally {
+      setIsLoadingFullView(false)
     }
+  }
+
+  useEffect(() => {
+    if (fullViewStep !== null && previewModalOpen) {
+      const timer = setTimeout(() => {
+        fetchFullData(fullViewStep, fullViewSearch)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullViewSearch, fullViewStep, previewModalOpen])
+
+  const handleViewData = (step: number) => {
+    if (!importacao) return
+    const card = CARDS.find((c) => c.step === step)
+    if (!card) return
+
+    setPreviewTitle(`Dados Atuais: ${card.title}`)
+    setPreviewHeaders(card.headers)
+    setFullViewStep(step)
+    setFullViewSearch('')
+    setPreviewData([])
+    setPreviewModalOpen(true)
   }
 
   const canConciliate =
@@ -331,12 +379,13 @@ export default function ImportPage() {
                 {hasData && (
                   <Button
                     variant="secondary"
-                    size="icon"
+                    className={cn(card.step === 1 ? 'flex-1' : 'w-12 px-0')}
                     onClick={() => handleViewData(card.step)}
                     title="Ver dados atuais"
                     disabled={isBusy}
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className={cn('w-4 h-4', card.step === 1 ? 'mr-2' : '')} />
+                    {card.step === 1 ? 'Ver Plano' : ''}
                   </Button>
                 )}
               </CardFooter>
@@ -411,16 +460,40 @@ export default function ImportPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+      <Dialog
+        open={previewModalOpen}
+        onOpenChange={(open) => {
+          setPreviewModalOpen(open)
+          if (!open) setFullViewStep(null)
+        }}
+      >
+        <DialogContent className="max-w-6xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>{previewTitle}</DialogTitle>
             <DialogDescription>
-              Exibindo as 10 primeiras linhas da base de dados atual.
+              Visualize os dados cadastrados na base para este arquivo. Exibindo até 1000 registros.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-center gap-4 mt-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+              <Input
+                placeholder="Buscar registros..."
+                className="pl-9"
+                value={fullViewSearch}
+                onChange={(e) => setFullViewSearch(e.target.value)}
+              />
+            </div>
+            {isLoadingFullView && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+          </div>
           <div className="flex-1 overflow-auto mt-4 border rounded-md">
-            <PreviewTable headers={previewHeaders} data={previewData} />
+            {isLoadingFullView && previewData.length === 0 ? (
+              <div className="p-8 flex justify-center items-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <PreviewTable headers={previewHeaders} data={previewData} />
+            )}
           </div>
           <DialogFooter className="mt-4">
             <Button onClick={() => setPreviewModalOpen(false)}>Fechar</Button>
