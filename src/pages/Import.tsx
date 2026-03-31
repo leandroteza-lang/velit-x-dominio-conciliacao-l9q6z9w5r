@@ -94,8 +94,15 @@ export default function ImportPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const { processData, isProcessing, uploadFile, processConciliacaoBalancetes, reset } =
-    useReconciliationStore()
+  const {
+    processData,
+    isProcessing,
+    uploadFile,
+    processConciliacaoBalancetes,
+    reset,
+    preparePlanoContasImport,
+    executePlanoContasImport,
+  } = useReconciliationStore()
 
   const [importacao, setImportacao] = useState<any>(null)
   const [counts, setCounts] = useState<Record<number, number>>({})
@@ -115,6 +122,13 @@ export default function ImportPage() {
     open: false,
     step: null,
   })
+
+  const [pcImportDialog, setPcImportDialog] = useState<{
+    open: boolean
+    data: any | null
+    isProcessing: boolean
+  }>({ open: false, data: null, isProcessing: false })
+
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   useEffect(() => {
@@ -135,27 +149,30 @@ export default function ImportPage() {
         .limit(1)
         .single()
 
-      if (imp) {
+      if (imp || true) {
         setImportacao(imp)
         const newCounts: Record<number, number> = {}
         const newUpdates: Record<number, string> = {}
 
         for (const card of CARDS) {
-          const { count } = await supabase
-            .from(card.table)
-            .select('*', { count: 'exact', head: true })
-            .eq('importacao_id', imp.id)
+          let query = supabase.from(card.table as any).select('*', { count: 'exact', head: true })
+          if (card.step === 1) {
+            query = query.eq('user_id', user.id)
+          } else if (imp) {
+            query = query.eq('importacao_id', imp.id)
+          } else {
+            query = query.eq('importacao_id', '00000000-0000-0000-0000-000000000000') // dummy if no import
+          }
+
+          const { count } = await query
 
           newCounts[card.step] = count || 0
           if (count && count > 0) {
-            newUpdates[card.step] = imp.created_at
+            newUpdates[card.step] = imp?.created_at || new Date().toISOString()
           }
         }
         setCounts(newCounts)
         setLastUpdates(newUpdates)
-      } else {
-        setCounts({})
-        setLastUpdates({})
       }
     } catch (err) {
       console.error(err)
@@ -165,6 +182,10 @@ export default function ImportPage() {
   }
 
   const handleCardUploadClick = (step: number) => {
+    if (step === 1) {
+      fileInputRefs.current[step]?.click()
+      return
+    }
     if (counts[step] > 0) {
       setReplaceDialog({ open: true, step })
     } else {
@@ -186,17 +207,24 @@ export default function ImportPage() {
 
     setIsProcessingLocal(true)
     try {
-      if (importacao && counts[step] > 0) {
-        const card = CARDS.find((c) => c.step === step)
-        if (card) {
-          await supabase.from(card.table).delete().eq('importacao_id', importacao.id)
+      if (step === 1) {
+        const result = await preparePlanoContasImport(file)
+        setPcImportDialog({ open: true, data: result, isProcessing: false })
+      } else {
+        if (importacao && counts[step] > 0) {
+          const card = CARDS.find((c) => c.step === step)
+          if (card) {
+            await supabase
+              .from(card.table as any)
+              .delete()
+              .eq('importacao_id', importacao.id)
+          }
         }
+
+        await uploadFile(step, file)
+        toast.success(`Arquivo importado com sucesso!`)
+        await fetchStatus()
       }
-
-      await uploadFile(step, file)
-      toast.success(`Arquivo importado com sucesso!`)
-
-      await fetchStatus()
     } catch (err: any) {
       toast.error('Erro ao importar: ' + err.message)
     } finally {
@@ -207,8 +235,22 @@ export default function ImportPage() {
     }
   }
 
+  const handlePcImportAction = async (action: 'ADD_NEW' | 'UPDATE_EXISTING' | 'REPLACE_ALL') => {
+    if (!pcImportDialog.data) return
+    setPcImportDialog((prev) => ({ ...prev, isProcessing: true }))
+    try {
+      await executePlanoContasImport(action, pcImportDialog.data.rawData)
+      toast.success('Plano de Contas atualizado com sucesso!')
+      setPcImportDialog({ open: false, data: null, isProcessing: false })
+      await fetchStatus()
+    } catch (err: any) {
+      toast.error('Erro ao atualizar Plano de Contas: ' + err.message)
+      setPcImportDialog((prev) => ({ ...prev, isProcessing: false }))
+    }
+  }
+
   const fetchFullData = async (step: number, search: string) => {
-    if (!importacao) return
+    if (!user) return
     const card = CARDS.find((c) => c.step === step)
     if (!card) return
 
@@ -217,8 +259,15 @@ export default function ImportPage() {
       let query = supabase
         .from(card.table as any)
         .select(card.columns.join(','))
-        .eq('importacao_id', importacao.id)
         .limit(1000)
+
+      if (step === 1) {
+        query = query.eq('user_id', user.id)
+      } else if (importacao) {
+        query = query.eq('importacao_id', importacao.id)
+      } else {
+        query = query.eq('importacao_id', '00000000-0000-0000-0000-000000000000')
+      }
 
       if (search) {
         const textColumns = card.columns.filter((c) =>
@@ -267,7 +316,6 @@ export default function ImportPage() {
   }, [fullViewSearch, fullViewStep, previewModalOpen])
 
   const handleViewData = (step: number) => {
-    if (!importacao) return
     const card = CARDS.find((c) => c.step === step)
     if (!card) return
 
@@ -382,7 +430,7 @@ export default function ImportPage() {
                   disabled={isBusy}
                 >
                   <UploadCloud className="w-4 h-4 mr-2" />
-                  {hasData ? 'Substituir' : 'Importar'}
+                  {hasData && card.step !== 1 ? 'Substituir' : 'Importar'}
                 </Button>
                 {hasData && (
                   <Button
@@ -463,6 +511,80 @@ export default function ImportPage() {
             </Button>
             <Button variant="default" onClick={confirmReplace}>
               Sim, Substituir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pcImportDialog.open}
+        onOpenChange={(o) =>
+          !pcImportDialog.isProcessing && setPcImportDialog((prev) => ({ ...prev, open: o }))
+        }
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Importação do Plano de Contas</DialogTitle>
+            <DialogDescription>
+              Analisamos o seu arquivo. Encontramos{' '}
+              <strong>{pcImportDialog.data?.newAccounts?.length || 0} contas novas</strong> e{' '}
+              <strong>
+                {pcImportDialog.data?.existingAccounts?.length || 0} contas que já existem
+              </strong>{' '}
+              na base. Como deseja prosseguir?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 py-4">
+            <Button
+              variant="outline"
+              className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1"
+              onClick={() => handlePcImportAction('ADD_NEW')}
+              disabled={pcImportDialog.isProcessing}
+            >
+              <span className="font-semibold text-primary">Adicionar apenas as novas</span>
+              <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                Contas que já existem serão ignoradas. Suas descrições e propriedades manuais serão
+                mantidas intactas.
+              </span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1"
+              onClick={() => handlePcImportAction('UPDATE_EXISTING')}
+              disabled={pcImportDialog.isProcessing}
+            >
+              <span className="font-semibold text-amber-600">
+                Atualizar existentes e adicionar novas
+              </span>
+              <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                Atualiza os nomes e classificações das contas existentes, mas mantém as propriedades
+                (Tipo, Natureza, Finalidade). Adiciona as contas novas.
+              </span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+              onClick={() => handlePcImportAction('REPLACE_ALL')}
+              disabled={pcImportDialog.isProcessing}
+            >
+              <span className="font-semibold text-red-600">Substituir todo o plano</span>
+              <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                Apaga todas as contas atuais (incluindo descrições manuais) e importa as contas do
+                arquivo.
+              </span>
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPcImportDialog((prev) => ({ ...prev, open: false }))}
+              disabled={pcImportDialog.isProcessing}
+            >
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

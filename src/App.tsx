@@ -13,6 +13,7 @@ import RazaoPorConta from './pages/RazaoPorConta'
 import LancamentosGerados from './pages/LancamentosGerados'
 import ResumoLancamentos from './pages/ResumoLancamentos'
 import Configuracoes from './pages/Configuracoes'
+import PlanoContas from './pages/cadastros/PlanoContas'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/lancamentos-gerados" element={<LancamentosGerados />} />
             <Route path="/resumo-lancamentos" element={<ResumoLancamentos />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/cadastros/plano-contas" element={<PlanoContas />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

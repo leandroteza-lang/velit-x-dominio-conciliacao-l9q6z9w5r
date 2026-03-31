@@ -12,6 +12,7 @@ import {
   FileText,
   PieChart,
   Settings,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -81,6 +82,19 @@ export default function Layout() {
                 }
               >
                 <UploadCloud className="w-4 h-4" /> Importar
+              </NavLink>
+              <NavLink
+                to="/cadastros/plano-contas"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800',
+                  )
+                }
+              >
+                <BookOpen className="w-4 h-4" /> Cadastros
               </NavLink>
               <NavLink
                 to="/conciliacao-balancetes"

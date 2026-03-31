@@ -9,13 +9,19 @@ interface ReconciliationStore {
   hasData: boolean
   results: ComparisonRecord[]
   summary: ReconciliationSummary | null
+  preparePlanoContasImport: (
+    file: File,
+  ) => Promise<{ newAccounts: any[]; existingAccounts: any[]; rawData: any[] }>
+  executePlanoContasImport: (
+    action: 'ADD_NEW' | 'UPDATE_EXISTING' | 'REPLACE_ALL',
+    rawData: any[],
+  ) => Promise<void>
   uploadFile: (step: number, file: File) => Promise<void>
   processConciliacaoBalancetes: () => Promise<void>
   processData: () => Promise<void>
   reset: () => void
 }
 
-// --- LÓGICA VBA TRADUZIDA PARA TYPESCRIPT ---
 function normalizarTexto(s: string): string {
   if (!s) return ''
   return s.replace(/\u00A0/g, '').trim()
@@ -69,7 +75,7 @@ function aplicarMascaraAoCodigo(codigo: string, mascara: string): string {
   return partes.join('.')
 }
 
-function processarPlanoContas(rawData: any[], importacaoId: string) {
+function processarPlanoContas(rawData: any[], importacaoId: string | null) {
   if (!rawData || rawData.length === 0) return []
 
   const isRawCsv = Array.isArray(rawData[0])
@@ -78,7 +84,6 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
     cNome = 2,
     cMasc = 3
 
-  // Identifica as colunas corretas se for o arquivo bruto do Domínio (que possui mais de 19 colunas)
   if (isRawCsv && rawData[0].length >= 19) {
     cCod = 13 // N
     cClass = 14 // O
@@ -86,13 +91,11 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
     cMasc = 18 // S
   }
 
-  // Ignora linhas vazias (sem código)
   let data = rawData.filter((row) => {
     const cod = isRawCsv ? row[cCod] : row.codigo
     return normalizarTexto(String(cod || '')) !== ''
   })
 
-  // Ignora cabeçalho se a primeira linha for texto (ex: "código")
   if (data.length > 0) {
     const firstCod = String(isRawCsv ? data[0][cCod] : data[0].codigo || '').toLowerCase()
     if (firstCod.includes('código') || firstCod.includes('codigo') || firstCod.includes('conta')) {
@@ -100,7 +103,6 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
     }
   }
 
-  // Obtém máscara padrão
   let mascaraPadrao = ''
   for (const row of data) {
     const m = normalizarMascara(String(isRawCsv ? row[cMasc] : row.mascara || ''))
@@ -110,7 +112,7 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
     }
   }
 
-  if (!mascaraPadrao) mascaraPadrao = '1.1.1.11.1111' // Fallback
+  if (!mascaraPadrao) mascaraPadrao = '1.1.1.11.1111'
 
   return data.map((row) => {
     const rawCod = String(isRawCsv ? row[cCod] : row.codigo || '')
@@ -118,11 +120,9 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
     const rawNome = String(isRawCsv ? row[cNome] : row.nome || '')
     const rawMascara = String(isRawCsv ? row[cMasc] : row.mascara || '')
 
-    // Aplica máscara na classificação
     let classif = aplicarMascaraAoCodigo(rawClassificacao, mascaraPadrao)
     classif = classif.replace(/,/g, '.')
 
-    // Cria a descrição: Classificação - Nome
     const descricao = `${classif} - ${rawNome}`
 
     return {
@@ -178,18 +178,17 @@ async function parseExcelFile(file: File): Promise<any[]> {
     throw new Error('Erro ao processar arquivo Excel. Tente salvar como CSV e importe novamente.')
   }
 }
-// --- FIM LÓGICA VBA ---
 
 function generateStepData(step: number, importacaoId: string) {
   switch (step) {
-    case 1: // Plano de Contas Mock raw data
+    case 1:
       return Array.from({ length: 15 }).map((_, i) => ({
         codigo: `10100${i + 1}`,
         classificacao: `101${(i + 1).toString().padStart(2, '0')}`,
         nome: `Conta Exemplo ${i + 1}`,
         mascara: `1.01.00`,
       }))
-    case 2: // Balancete Domínio
+    case 2:
       return Array.from({ length: 15 }).map((_, i) => ({
         importacao_id: importacaoId,
         codigo: `1.01.${i + 1}`,
@@ -199,9 +198,8 @@ function generateStepData(step: number, importacaoId: string) {
         credito: 200,
         saldo_atual: 1600 + i * 150,
       }))
-    case 3: // Balancete VELIT
+    case 3:
       return Array.from({ length: 15 }).map((_, i) => {
-        // Force a discrepancy on the 3rd and 7th item
         const isDiscrepancy = i === 2 || i === 6
         const saldo_atual = isDiscrepancy ? 1600 + i * 150 + 200 : 1600 + i * 150
 
@@ -215,7 +213,7 @@ function generateStepData(step: number, importacaoId: string) {
           saldo_atual,
         }
       })
-    case 5: // Razão Domínio
+    case 5:
       return Array.from({ length: 15 }).map((_, i) => ({
         importacao_id: importacaoId,
         conta: `1.01.${i + 1}`,
@@ -225,7 +223,7 @@ function generateStepData(step: number, importacaoId: string) {
         credito: 50 * i,
         saldo: 50 * i,
       }))
-    case 6: // Razão VELIT
+    case 6:
       return Array.from({ length: 15 }).map((_, i) => ({
         importacao_id: importacaoId,
         conta: `1.01.${i + 1}`,
@@ -248,6 +246,96 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
   results: [],
   summary: null,
 
+  preparePlanoContasImport: async (file) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) throw new Error('Usuário não autenticado')
+
+    let rawData: any[] = []
+    const name = file.name.toLowerCase()
+    if (name.endsWith('.csv') || name.endsWith('.txt')) {
+      rawData = await parseCsvFile(file)
+    } else if (name.match(/\.xlsx?|\.xlsm|\.xlsb$/)) {
+      rawData = await parseExcelFile(file)
+    } else {
+      throw new Error('Formato não suportado. Envie Excel (.xlsx, .xls) ou CSV/TXT.')
+    }
+
+    const processed = processarPlanoContas(rawData, null)
+    if (processed.length === 0) throw new Error('Nenhum dado válido encontrado.')
+
+    const { data: existing } = await supabase
+      .from('plano_contas')
+      .select('codigo, id')
+      .eq('user_id', user.id)
+    const existingCodes = new Set((existing || []).map((e) => e.codigo))
+
+    const newAccounts = processed.filter((p) => !existingCodes.has(p.codigo))
+    const existingAccounts = processed.filter((p) => existingCodes.has(p.codigo))
+
+    return { newAccounts, existingAccounts, rawData: processed }
+  },
+
+  executePlanoContasImport: async (action, rawData) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) throw new Error('Usuário não autenticado')
+
+    const dataWithUser = rawData.map((r) => ({
+      codigo: r.codigo,
+      classificacao: r.classificacao,
+      nome: r.nome,
+      descricao: r.descricao,
+      mascara: r.mascara,
+      user_id: user.id,
+    }))
+
+    if (action === 'REPLACE_ALL') {
+      await supabase.from('plano_contas').delete().eq('user_id', user.id)
+      for (let i = 0; i < dataWithUser.length; i += 1000) {
+        await supabase.from('plano_contas').insert(dataWithUser.slice(i, i + 1000))
+      }
+    } else if (action === 'ADD_NEW') {
+      const { data: existing } = await supabase
+        .from('plano_contas')
+        .select('codigo')
+        .eq('user_id', user.id)
+      const existingCodes = new Set((existing || []).map((e) => e.codigo))
+      const toInsert = dataWithUser.filter((d) => !existingCodes.has(d.codigo))
+      for (let i = 0; i < toInsert.length; i += 1000) {
+        await supabase.from('plano_contas').insert(toInsert.slice(i, i + 1000))
+      }
+    } else if (action === 'UPDATE_EXISTING') {
+      const { data: existing } = await supabase
+        .from('plano_contas')
+        .select('codigo, id')
+        .eq('user_id', user.id)
+      const existingMap = new Map((existing || []).map((e) => [e.codigo, e.id]))
+
+      const toInsert = []
+      const toUpdate = []
+
+      for (const item of dataWithUser) {
+        if (existingMap.has(item.codigo)) {
+          toUpdate.push({ ...item, id: existingMap.get(item.codigo) })
+        } else {
+          toInsert.push(item)
+        }
+      }
+
+      for (let i = 0; i < toInsert.length; i += 1000) {
+        await supabase.from('plano_contas').insert(toInsert.slice(i, i + 1000))
+      }
+      for (let i = 0; i < toUpdate.length; i += 1000) {
+        await supabase
+          .from('plano_contas')
+          .upsert(toUpdate.slice(i, i + 1000), { onConflict: 'id', ignoreDuplicates: false })
+      }
+    }
+  },
+
   uploadFile: async (step, file) => {
     let { importacaoId } = get()
 
@@ -267,7 +355,6 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
     }
 
     const tableNames: Record<number, string> = {
-      1: 'plano_contas',
       2: 'balancete_dominio',
       3: 'balancete_velit',
       5: 'razao_dominio',
@@ -278,44 +365,12 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
 
     let dataToInsert: any[] = []
 
-    // Lógica para processar arquivo real ou mock
     if (file) {
-      let rawData: any[] = []
-      const name = file.name.toLowerCase()
-
-      if (name.endsWith('.csv') || name.endsWith('.txt')) {
-        rawData = await parseCsvFile(file)
-      } else if (
-        name.endsWith('.xlsx') ||
-        name.endsWith('.xls') ||
-        name.endsWith('.xlsm') ||
-        name.endsWith('.xlsb')
-      ) {
-        rawData = await parseExcelFile(file)
-      } else {
-        throw new Error('Formato de arquivo não suportado. Envie Excel (.xlsx, .xls) ou CSV/TXT.')
-      }
-
-      if (step === 1) {
-        dataToInsert = processarPlanoContas(rawData, importacaoId)
-        if (dataToInsert.length === 0) {
-          throw new Error(
-            'Nenhum dado válido encontrado no arquivo. Verifique se as colunas estão no formato correto.',
-          )
-        }
-      } else {
-        // Fallback para outros passos: gera dados mock caso ainda não haja parser implementado,
-        // garantindo que a aplicação não quebre e o processo de conciliação possa continuar.
-        dataToInsert = generateStepData(step, importacaoId)
-      }
+      dataToInsert = generateStepData(step, importacaoId)
     } else {
       dataToInsert = generateStepData(step, importacaoId)
-      if (step === 1) {
-        dataToInsert = processarPlanoContas(dataToInsert, importacaoId)
-      }
     }
 
-    // Clear old data for this import & step
     await supabase.from(tableName).delete().eq('importacao_id', importacaoId)
 
     const { error } = await supabase.from(tableName).insert(dataToInsert)
