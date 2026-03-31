@@ -19,7 +19,7 @@ CREATE POLICY "auth_all" ON public.lancamentos_gerados
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Seed some initial data for testing if table is empty
-DO $
+DO $$
 DECLARE
   v_importacao_id UUID;
 BEGIN
@@ -35,4 +35,4 @@ BEGIN
         (v_importacao_id, '2023-12-10'::date, '2.1.1.01.0001', '1.1.1.01.0001', 450.75, 'Normal', 'Aprovado');
     END IF;
   END IF;
-END $;
+END $$;
