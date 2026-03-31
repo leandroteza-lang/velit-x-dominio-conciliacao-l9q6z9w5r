@@ -154,7 +154,10 @@ export default function ImportPage() {
       const newUpdates: Record<number, string> = {}
 
       for (const card of CARDS) {
-        let query = supabase.from(card.table as any).select('*', { count: 'exact', head: true })
+        let query = supabase
+          .from(card.table as any)
+          .select('id', { count: 'exact' })
+          .limit(1)
         if (card.step === 1) {
           query = query.eq('user_id', user.id)
         } else if (imp) {

@@ -293,28 +293,40 @@ export type Database = {
           classificacao: string | null
           codigo: string | null
           descricao: string | null
+          finalidade: string | null
           id: string
-          importacao_id: string
+          importacao_id: string | null
           mascara: string | null
+          natureza: string | null
           nome: string | null
+          tipo: string | null
+          user_id: string | null
         }
         Insert: {
           classificacao?: string | null
           codigo?: string | null
           descricao?: string | null
+          finalidade?: string | null
           id?: string
-          importacao_id: string
+          importacao_id?: string | null
           mascara?: string | null
+          natureza?: string | null
           nome?: string | null
+          tipo?: string | null
+          user_id?: string | null
         }
         Update: {
           classificacao?: string | null
           codigo?: string | null
           descricao?: string | null
+          finalidade?: string | null
           id?: string
-          importacao_id?: string
+          importacao_id?: string | null
           mascara?: string | null
+          natureza?: string | null
           nome?: string | null
+          tipo?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -721,12 +733,16 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 // Table: plano_contas
 //   id: uuid (not null, default: gen_random_uuid())
-//   importacao_id: uuid (not null)
+//   importacao_id: uuid (nullable)
 //   codigo: text (nullable)
 //   classificacao: text (nullable)
 //   nome: text (nullable)
 //   descricao: text (nullable)
 //   mascara: text (nullable)
+//   user_id: uuid (nullable)
+//   tipo: text (nullable)
+//   natureza: text (nullable)
+//   finalidade: text (nullable)
 // Table: razao_conferencia
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
@@ -797,6 +813,7 @@ export const Constants = {
 // Table: plano_contas
 //   FOREIGN KEY plano_contas_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY plano_contas_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY plano_contas_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 // Table: razao_conferencia
 //   FOREIGN KEY razao_conferencia_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY razao_conferencia_pkey: PRIMARY KEY (id)
@@ -847,6 +864,9 @@ export const Constants = {
 // Table: plano_contas
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
+//   Policy "auth_plano_contas_all" (ALL, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (importacao_id IN ( SELECT importacoes.id    FROM importacoes   WHERE (importacoes.user_id = auth.uid()))))
+//     WITH CHECK: ((user_id = auth.uid()) OR (importacao_id IN ( SELECT importacoes.id    FROM importacoes   WHERE (importacoes.user_id = auth.uid()))))
 // Table: razao_conferencia
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
