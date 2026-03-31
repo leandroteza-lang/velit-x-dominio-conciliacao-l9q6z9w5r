@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
+import Results from './pages/Results'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -18,7 +19,7 @@ const App = () => (
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES MUST BE ADDED HERE */}
+          <Route path="/results" element={<Results />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
