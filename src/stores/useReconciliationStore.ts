@@ -87,10 +87,18 @@ function processarPlanoContas(rawData: any[], importacaoId: string) {
   }
 
   // Ignora linhas vazias (sem código)
-  const data = rawData.filter((row) => {
+  let data = rawData.filter((row) => {
     const cod = isRawCsv ? row[cCod] : row.codigo
     return normalizarTexto(String(cod || '')) !== ''
   })
+
+  // Ignora cabeçalho se a primeira linha for texto (ex: "código")
+  if (data.length > 0) {
+    const firstCod = String(isRawCsv ? data[0][cCod] : data[0].codigo || '').toLowerCase()
+    if (firstCod.includes('código') || firstCod.includes('codigo') || firstCod.includes('conta')) {
+      data = data.slice(1)
+    }
+  }
 
   // Obtém máscara padrão
   let mascaraPadrao = ''
@@ -132,9 +140,42 @@ async function parseCsvFile(file: File): Promise<any[]> {
   try {
     const text = await file.text()
     const lines = text.split(/\r?\n/)
-    return lines.map((line) => line.split(/[;,]/))
+    return lines.map((line) => {
+      const row = []
+      let inQuotes = false
+      let value = ''
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i]
+        if (char === '"') {
+          inQuotes = !inQuotes
+        } else if ((char === ';' || char === ',') && !inQuotes) {
+          row.push(value.trim())
+          value = ''
+        } else {
+          value += char
+        }
+      }
+      row.push(value.trim())
+      return row
+    })
   } catch (e) {
     return []
+  }
+}
+
+async function parseExcelFile(file: File): Promise<any[]> {
+  try {
+    const XLSX = await import(
+      /* @vite-ignore */ 'https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs'
+    )
+    const arrayBuffer = await file.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+    const firstSheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[firstSheetName]
+    return XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+  } catch (e: any) {
+    console.error('Error parsing Excel:', e)
+    throw new Error('Erro ao processar arquivo Excel. Tente salvar como CSV e importe novamente.')
   }
 }
 // --- FIM LÓGICA VBA ---
@@ -238,20 +279,40 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
     let dataToInsert: any[] = []
 
     // Lógica para processar arquivo real ou mock
-    if (step === 1) {
-      // Se for CSV ou TXT, tenta processar o arquivo. Senão usa o mock para demonstração.
-      let rawData = []
-      if (file && (file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+    if (file) {
+      let rawData: any[] = []
+      const name = file.name.toLowerCase()
+
+      if (name.endsWith('.csv') || name.endsWith('.txt')) {
         rawData = await parseCsvFile(file)
-        if (rawData.length > 1) {
-          rawData = rawData.slice(1) // Ignora cabeçalho
+      } else if (
+        name.endsWith('.xlsx') ||
+        name.endsWith('.xls') ||
+        name.endsWith('.xlsm') ||
+        name.endsWith('.xlsb')
+      ) {
+        rawData = await parseExcelFile(file)
+      } else {
+        throw new Error('Formato de arquivo não suportado. Envie Excel (.xlsx, .xls) ou CSV/TXT.')
+      }
+
+      if (step === 1) {
+        dataToInsert = processarPlanoContas(rawData, importacaoId)
+        if (dataToInsert.length === 0) {
+          throw new Error(
+            'Nenhum dado válido encontrado no arquivo. Verifique se as colunas estão no formato correto.',
+          )
         }
       } else {
-        rawData = generateStepData(step, importacaoId)
+        // Fallback para outros passos: gera dados mock caso ainda não haja parser implementado,
+        // garantindo que a aplicação não quebre e o processo de conciliação possa continuar.
+        dataToInsert = generateStepData(step, importacaoId)
       }
-      dataToInsert = processarPlanoContas(rawData, importacaoId)
     } else {
       dataToInsert = generateStepData(step, importacaoId)
+      if (step === 1) {
+        dataToInsert = processarPlanoContas(dataToInsert, importacaoId)
+      }
     }
 
     // Clear old data for this import & step
