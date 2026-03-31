@@ -217,6 +217,50 @@ export type Database = {
           },
         ]
       }
+      lancamentos_gerados: {
+        Row: {
+          conta_credito: string | null
+          conta_debito: string | null
+          created_at: string | null
+          data: string | null
+          id: string
+          importacao_id: string
+          status: string | null
+          tipo: string | null
+          valor: number | null
+        }
+        Insert: {
+          conta_credito?: string | null
+          conta_debito?: string | null
+          created_at?: string | null
+          data?: string | null
+          id?: string
+          importacao_id: string
+          status?: string | null
+          tipo?: string | null
+          valor?: number | null
+        }
+        Update: {
+          conta_credito?: string | null
+          conta_debito?: string | null
+          created_at?: string | null
+          data?: string | null
+          id?: string
+          importacao_id?: string
+          status?: string | null
+          tipo?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'lancamentos_gerados_importacao_id_fkey'
+            columns: ['importacao_id']
+            isOneToOne: false
+            referencedRelation: 'importacoes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       plano_contas: {
         Row: {
           classificacao: string | null
@@ -598,6 +642,16 @@ export const Constants = {
 //   conta: text (nullable)
 //   valor: numeric (nullable)
 //   data: date (nullable)
+// Table: lancamentos_gerados
+//   id: uuid (not null, default: gen_random_uuid())
+//   importacao_id: uuid (not null)
+//   data: date (nullable)
+//   conta_debito: text (nullable)
+//   conta_credito: text (nullable)
+//   valor: numeric (nullable)
+//   tipo: text (nullable)
+//   status: text (nullable)
+//   created_at: timestamp with time zone (nullable, default: now())
 // Table: plano_contas
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
@@ -658,6 +712,9 @@ export const Constants = {
 // Table: lancamentos_dominio
 //   FOREIGN KEY lancamentos_dominio_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY lancamentos_dominio_pkey: PRIMARY KEY (id)
+// Table: lancamentos_gerados
+//   FOREIGN KEY lancamentos_gerados_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
+//   PRIMARY KEY lancamentos_gerados_pkey: PRIMARY KEY (id)
 // Table: plano_contas
 //   FOREIGN KEY plano_contas_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY plano_contas_pkey: PRIMARY KEY (id)
@@ -693,6 +750,10 @@ export const Constants = {
 // Table: lancamentos_dominio
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
+// Table: lancamentos_gerados
+//   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
+//     USING: true
+//     WITH CHECK: true
 // Table: plano_contas
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
