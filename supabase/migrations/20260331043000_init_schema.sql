@@ -1,5 +1,5 @@
 -- Seed user leandro_teza@hotmail.com
-DO $
+DO $$
 DECLARE
   new_user_id uuid;
 BEGIN
@@ -26,7 +26,7 @@ BEGIN
       '', '', ''
     );
   END IF;
-END $;
+END $$;
 
 -- Create tables
 CREATE TABLE IF NOT EXISTS public.importacoes (
@@ -145,7 +145,7 @@ ALTER TABLE public.lancamentos_dominio ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.resumo_lancamentos ENABLE ROW LEVEL SECURITY;
 
 -- Create Policies (allow authenticated users to read/write all rows in their scope, using true for simplicity as per spec)
-DO $
+DO $$
 DECLARE
   t TEXT;
 BEGIN
@@ -153,4 +153,4 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "auth_all" ON public.%I', t);
     EXECUTE format('CREATE POLICY "auth_all" ON public.%I FOR ALL TO authenticated USING (true)', t);
   END LOOP;
-END $;
+END $$;
