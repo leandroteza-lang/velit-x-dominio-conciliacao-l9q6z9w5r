@@ -12,6 +12,7 @@ import ConciliacaoRazoes from './pages/ConciliacaoRazoes'
 import RazaoPorConta from './pages/RazaoPorConta'
 import LancamentosGerados from './pages/LancamentosGerados'
 import ResumoLancamentos from './pages/ResumoLancamentos'
+import Configuracoes from './pages/Configuracoes'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/razao-por-conta" element={<RazaoPorConta />} />
             <Route path="/lancamentos-gerados" element={<LancamentosGerados />} />
             <Route path="/resumo-lancamentos" element={<ResumoLancamentos />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
