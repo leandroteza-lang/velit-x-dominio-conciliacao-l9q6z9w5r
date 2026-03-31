@@ -8,6 +8,7 @@ import ImportPage from './pages/Import'
 import HistoryPage from './pages/History'
 import Results from './pages/Results'
 import ConciliacaoBalancetes from './pages/ConciliacaoBalancetes'
+import ConciliacaoRazoes from './pages/ConciliacaoRazoes'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/results" element={<Results />} />
             <Route path="/conciliacao-balancetes" element={<ConciliacaoBalancetes />} />
+            <Route path="/conciliacao-razoes" element={<ConciliacaoRazoes />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

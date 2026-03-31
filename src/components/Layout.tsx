@@ -2,7 +2,15 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import Login from '@/pages/Login'
 import { Button } from '@/components/ui/button'
-import { LogOut, Loader2, LayoutDashboard, UploadCloud, BarChart3, History } from 'lucide-react'
+import {
+  LogOut,
+  Loader2,
+  LayoutDashboard,
+  UploadCloud,
+  BarChart3,
+  History,
+  FileText,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Layout() {
@@ -84,6 +92,19 @@ export default function Layout() {
                 }
               >
                 <BarChart3 className="w-4 h-4" /> Balancetes
+              </NavLink>
+              <NavLink
+                to="/conciliacao-razoes"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800',
+                  )
+                }
+              >
+                <FileText className="w-4 h-4" /> Razões
               </NavLink>
               <NavLink
                 to="/history"
