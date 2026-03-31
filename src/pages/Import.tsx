@@ -147,33 +147,31 @@ export default function ImportPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (imp || true) {
-        setImportacao(imp)
-        const newCounts: Record<number, number> = {}
-        const newUpdates: Record<number, string> = {}
+      setImportacao(imp)
+      const newCounts: Record<number, number> = {}
+      const newUpdates: Record<number, string> = {}
 
-        for (const card of CARDS) {
-          let query = supabase.from(card.table as any).select('*', { count: 'exact', head: true })
-          if (card.step === 1) {
-            query = query.eq('user_id', user.id)
-          } else if (imp) {
-            query = query.eq('importacao_id', imp.id)
-          } else {
-            query = query.eq('importacao_id', '00000000-0000-0000-0000-000000000000') // dummy if no import
-          }
-
-          const { count } = await query
-
-          newCounts[card.step] = count || 0
-          if (count && count > 0) {
-            newUpdates[card.step] = imp?.created_at || new Date().toISOString()
-          }
+      for (const card of CARDS) {
+        let query = supabase.from(card.table as any).select('*', { count: 'exact', head: true })
+        if (card.step === 1) {
+          query = query.eq('user_id', user.id)
+        } else if (imp) {
+          query = query.eq('importacao_id', imp.id)
+        } else {
+          query = query.eq('importacao_id', '00000000-0000-0000-0000-000000000000') // dummy if no import
         }
-        setCounts(newCounts)
-        setLastUpdates(newUpdates)
+
+        const { count } = await query
+
+        newCounts[card.step] = count || 0
+        if (count && count > 0) {
+          newUpdates[card.step] = imp?.created_at || new Date().toISOString()
+        }
       }
+      setCounts(newCounts)
+      setLastUpdates(newUpdates)
     } catch (err) {
       console.error(err)
     } finally {

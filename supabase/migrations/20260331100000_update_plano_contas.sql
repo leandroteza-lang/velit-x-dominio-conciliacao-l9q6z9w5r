@@ -4,13 +4,13 @@ ALTER TABLE public.plano_contas ADD COLUMN IF NOT EXISTS tipo TEXT;
 ALTER TABLE public.plano_contas ADD COLUMN IF NOT EXISTS natureza TEXT;
 ALTER TABLE public.plano_contas ADD COLUMN IF NOT EXISTS finalidade TEXT;
 
-DO $
+DO $$
 BEGIN
   UPDATE public.plano_contas pc
   SET user_id = i.user_id
   FROM public.importacoes i
   WHERE pc.importacao_id = i.id AND pc.user_id IS NULL;
-END $;
+END $$;
 
 DROP POLICY IF EXISTS "auth_plano_contas_all" ON public.plano_contas;
 CREATE POLICY "auth_plano_contas_all" ON public.plano_contas
