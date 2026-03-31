@@ -341,6 +341,27 @@ export type Database = {
           },
         ]
       }
+      plano_contas_backup: {
+        Row: {
+          backup_date: string | null
+          data: Json
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          backup_date?: string | null
+          data: Json
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          backup_date?: string | null
+          data?: Json
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       razao_conferencia: {
         Row: {
           conta: string | null
@@ -747,6 +768,11 @@ export const Constants = {
 //   natureza: text (nullable)
 //   finalidade: text (nullable)
 //   nivel_tipo: text (nullable)
+// Table: plano_contas_backup
+//   id: uuid (not null, default: gen_random_uuid())
+//   user_id: uuid (nullable)
+//   backup_date: timestamp with time zone (nullable, default: now())
+//   data: jsonb (not null)
 // Table: razao_conferencia
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
@@ -818,6 +844,9 @@ export const Constants = {
 //   FOREIGN KEY plano_contas_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY plano_contas_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY plano_contas_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+// Table: plano_contas_backup
+//   PRIMARY KEY plano_contas_backup_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY plano_contas_backup_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 // Table: razao_conferencia
 //   FOREIGN KEY razao_conferencia_importacao_id_fkey: FOREIGN KEY (importacao_id) REFERENCES importacoes(id) ON DELETE CASCADE
 //   PRIMARY KEY razao_conferencia_pkey: PRIMARY KEY (id)
@@ -871,6 +900,10 @@ export const Constants = {
 //   Policy "auth_plano_contas_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (importacao_id IN ( SELECT importacoes.id    FROM importacoes   WHERE (importacoes.user_id = auth.uid()))))
 //     WITH CHECK: ((user_id = auth.uid()) OR (importacao_id IN ( SELECT importacoes.id    FROM importacoes   WHERE (importacoes.user_id = auth.uid()))))
+// Table: plano_contas_backup
+//   Policy "auth_plano_contas_backup_all" (ALL, PERMISSIVE) roles={authenticated}
+//     USING: (auth.uid() = user_id)
+//     WITH CHECK: (auth.uid() = user_id)
 // Table: razao_conferencia
 //   Policy "auth_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true

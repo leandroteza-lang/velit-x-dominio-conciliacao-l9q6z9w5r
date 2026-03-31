@@ -47,6 +47,7 @@ import {
   ArrowUp,
   ArrowDown,
   Layers,
+  RotateCcw,
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -64,6 +65,8 @@ export default function PlanoContas() {
   // Batch Update State
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [batchConfig, setBatchConfig] = useState({ prefix: '', tipo: '', natureza: '' })
+
+  const [restoring, setRestoring] = useState(false)
 
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'classificacao',
@@ -205,6 +208,127 @@ export default function PlanoContas() {
   const visibleContas = sortedContas.slice(startIndex, endIndex)
   const topSpacer = startIndex * rowHeight
   const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
+
+  const handleExport = () => {
+    if (sortedContas.length === 0) {
+      toast.error('Não há contas para exportar.')
+      return
+    }
+
+    const headers = ['Código', 'Classificação', 'Nome', 'Nível', 'Tipo', 'Natureza', 'Finalidade']
+    const csvContent = [
+      headers.join(';'),
+      ...sortedContas.map((c) => {
+        const nivel = getCalculatedLevel(c.classificacao)
+        return [
+          c.codigo || '',
+          c.classificacao || '',
+          `"${(c.nome || '').replace(/"/g, '""')}"`,
+          nivel,
+          c.tipo || '',
+          c.natureza || '',
+          `"${(c.finalidade || '').replace(/"/g, '""')}"`,
+        ].join(';')
+      }),
+    ].join('\n')
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `plano_contas_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    if (user) {
+      supabase
+        .from('export_history')
+        .insert([
+          {
+            user_id: user.id,
+            file_name: `plano_contas_${new Date().toISOString().split('T')[0]}.csv`,
+            type: 'PLANO_CONTAS',
+            records_count: sortedContas.length,
+          },
+        ])
+        .then()
+    }
+  }
+
+  const handleRestore = async () => {
+    if (!user) return
+    if (
+      !confirm(
+        'Atenção: Isso irá desfazer a última importação e restaurar o plano de contas anterior. Deseja continuar?',
+      )
+    )
+      return
+
+    setRestoring(true)
+    try {
+      const { data: backups, error: backupError } = await supabase
+        .from('plano_contas_backup')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('backup_date', { ascending: false })
+        .limit(1)
+
+      if (backupError) throw backupError
+      if (!backups || backups.length === 0) {
+        toast.error('Nenhum backup encontrado para restaurar.')
+        setRestoring(false)
+        return
+      }
+
+      const lastBackup = backups[0]
+      const backupData = lastBackup.data as any[]
+
+      if (!Array.isArray(backupData) || backupData.length === 0) {
+        toast.error('O backup encontrado está vazio ou inválido.')
+        setRestoring(false)
+        return
+      }
+
+      // Deletar as contas atuais em lotes para evitar limite de 1000
+      const { data: currentContas } = await supabase
+        .from('plano_contas')
+        .select('id')
+        .eq('user_id', user.id)
+
+      if (currentContas && currentContas.length > 0) {
+        const ids = currentContas.map((c) => c.id)
+        for (let i = 0; i < ids.length; i += 1000) {
+          const batch = ids.slice(i, i + 1000)
+          await supabase.from('plano_contas').delete().in('id', batch)
+        }
+      }
+
+      // Inserir os dados de backup também em lotes
+      const sanitizedData = backupData.map((c) => {
+        const { id, importacao_id, ...rest } = c
+        return {
+          ...rest,
+          user_id: user.id,
+        }
+      })
+
+      for (let i = 0; i < sanitizedData.length; i += 1000) {
+        const batch = sanitizedData.slice(i, i + 1000)
+        const { error: insertError } = await supabase.from('plano_contas').insert(batch)
+        if (insertError) throw insertError
+      }
+
+      toast.success('Plano de contas restaurado com sucesso!')
+      fetchContas()
+    } catch (err: any) {
+      console.error(err)
+      toast.error('Erro ao restaurar: ' + err.message)
+    } finally {
+      setRestoring(false)
+    }
+  }
 
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -455,6 +579,28 @@ export default function PlanoContas() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          <Button
+            variant="outline"
+            onClick={handleRestore}
+            disabled={restoring}
+            className="text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+          >
+            {restoring ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RotateCcw className="w-4 h-4 mr-2" />
+            )}
+            Desfazer Importação
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            className="bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+          >
+            <Download className="w-4 h-4 mr-2" /> Exportar
+          </Button>
 
           <Button onClick={openNew}>
             <Plus className="w-4 h-4 mr-2" /> Adicionar Conta
