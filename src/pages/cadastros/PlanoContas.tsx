@@ -291,17 +291,40 @@ export default function PlanoContas() {
         return
       }
 
-      // Deletar as contas atuais em lotes para evitar limite de 1000
-      const { data: currentContas } = await supabase
-        .from('plano_contas')
-        .select('id')
-        .eq('user_id', user.id)
+      // Deletar as contas atuais em lotes de 100 para evitar erro de URL longa (400)
+      // Primeiro busca todos os IDs com paginação
+      let allIdsToDelete: string[] = []
+      let fromDelete = 0
+      const stepDelete = 1000
+      let fetchMoreDelete = true
 
-      if (currentContas && currentContas.length > 0) {
-        const ids = currentContas.map((c) => c.id)
-        for (let i = 0; i < ids.length; i += 1000) {
-          const batch = ids.slice(i, i + 1000)
-          await supabase.from('plano_contas').delete().in('id', batch)
+      while (fetchMoreDelete) {
+        const { data: currentContas, error: fetchError } = await supabase
+          .from('plano_contas')
+          .select('id')
+          .eq('user_id', user.id)
+          .range(fromDelete, fromDelete + stepDelete - 1)
+
+        if (fetchError) throw fetchError
+
+        if (currentContas && currentContas.length > 0) {
+          allIdsToDelete = [...allIdsToDelete, ...currentContas.map((c) => c.id)]
+          fromDelete += stepDelete
+          if (currentContas.length < stepDelete) fetchMoreDelete = false
+        } else {
+          fetchMoreDelete = false
+        }
+      }
+
+      if (allIdsToDelete.length > 0) {
+        const DELETE_BATCH_SIZE = 100 // Limite seguro para não estourar o tamanho da URL
+        for (let i = 0; i < allIdsToDelete.length; i += DELETE_BATCH_SIZE) {
+          const batch = allIdsToDelete.slice(i, i + DELETE_BATCH_SIZE)
+          const { error: deleteError } = await supabase
+            .from('plano_contas')
+            .delete()
+            .in('id', batch)
+          if (deleteError) throw deleteError
         }
       }
 
@@ -366,7 +389,17 @@ export default function PlanoContas() {
     if (selected.size === 0) return
     if (!confirm(`Excluir ${selected.size} contas selecionadas?`)) return
 
-    await supabase.from('plano_contas').delete().in('id', Array.from(selected))
+    const selectedIds = Array.from(selected)
+    const DELETE_BATCH_SIZE = 100
+    for (let i = 0; i < selectedIds.length; i += DELETE_BATCH_SIZE) {
+      const batch = selectedIds.slice(i, i + DELETE_BATCH_SIZE)
+      const { error } = await supabase.from('plano_contas').delete().in('id', batch)
+      if (error) {
+        toast.error('Erro ao excluir: ' + error.message)
+        return
+      }
+    }
+
     toast.success('Contas excluídas com sucesso!')
     setSelected(new Set())
     fetchContas()

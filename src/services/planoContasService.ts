@@ -89,9 +89,11 @@ export const executePlanoContasImport = async (
   // 3. Process DELETES (if replacing total chart of accounts) via batches
   if (mode === 'REPLACE') {
     const toDeleteIds = Array.from(existingMapByClassificacao.values()).map((c) => c.id)
-    for (let i = 0; i < toDeleteIds.length; i += 1000) {
-      const batch = toDeleteIds.slice(i, i + 1000)
-      await supabase.from('plano_contas').delete().in('id', batch)
+    const DELETE_BATCH_SIZE = 100
+    for (let i = 0; i < toDeleteIds.length; i += DELETE_BATCH_SIZE) {
+      const batch = toDeleteIds.slice(i, i + DELETE_BATCH_SIZE)
+      const { error: deleteError } = await supabase.from('plano_contas').delete().in('id', batch)
+      if (deleteError) throw deleteError
     }
   }
 
