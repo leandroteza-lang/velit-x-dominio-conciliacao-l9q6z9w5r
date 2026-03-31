@@ -15,16 +15,138 @@ interface ReconciliationStore {
   reset: () => void
 }
 
+// --- LÓGICA VBA TRADUZIDA PARA TYPESCRIPT ---
+function normalizarTexto(s: string): string {
+  if (!s) return ''
+  return s.replace(/\u00A0/g, '').trim()
+}
+
+function normalizarMascara(s: string): string {
+  let m = normalizarTexto(s).replace(/\s+/g, '')
+  while (m.includes('..')) m = m.replace(/\.\./g, '.')
+  while (m.endsWith('.')) m = m.slice(0, -1)
+  return m
+}
+
+function somenteDigitos(s: string): string {
+  return normalizarTexto(s).replace(/\D/g, '')
+}
+
+function aplicarMascaraAoCodigo(codigo: string, mascara: string): string {
+  const m = normalizarMascara(mascara)
+  if (!m) return normalizarTexto(codigo)
+
+  const codigoLimpo = somenteDigitos(codigo)
+  if (!codigoLimpo) return ''
+
+  const tokens = m.split('.')
+  const lens = tokens.map((t) => t.length)
+
+  const partes: string[] = []
+  let pos = 0
+
+  for (const len of lens) {
+    if (pos >= codigoLimpo.length) break
+    if (pos + len <= codigoLimpo.length) {
+      partes.push(codigoLimpo.substring(pos, pos + len))
+      pos += len
+    } else {
+      partes.push(codigoLimpo.substring(pos))
+      pos = codigoLimpo.length
+      break
+    }
+  }
+
+  if (pos < codigoLimpo.length) {
+    if (partes.length === 0) {
+      partes.push(codigoLimpo.substring(pos))
+    } else {
+      const ultimo = partes.pop()! + codigoLimpo.substring(pos)
+      partes.push(ultimo)
+    }
+  }
+
+  return partes.join('.')
+}
+
+function processarPlanoContas(rawData: any[], importacaoId: string) {
+  if (!rawData || rawData.length === 0) return []
+
+  const isRawCsv = Array.isArray(rawData[0])
+  let cCod = 0,
+    cClass = 1,
+    cNome = 2,
+    cMasc = 3
+
+  // Identifica as colunas corretas se for o arquivo bruto do Domínio (que possui mais de 19 colunas)
+  if (isRawCsv && rawData[0].length >= 19) {
+    cCod = 13 // N
+    cClass = 14 // O
+    cNome = 15 // P
+    cMasc = 18 // S
+  }
+
+  // Ignora linhas vazias (sem código)
+  const data = rawData.filter((row) => {
+    const cod = isRawCsv ? row[cCod] : row.codigo
+    return normalizarTexto(String(cod || '')) !== ''
+  })
+
+  // Obtém máscara padrão
+  let mascaraPadrao = ''
+  for (const row of data) {
+    const m = normalizarMascara(String(isRawCsv ? row[cMasc] : row.mascara || ''))
+    if (m) {
+      mascaraPadrao = m
+      break
+    }
+  }
+
+  if (!mascaraPadrao) mascaraPadrao = '1.1.1.11.1111' // Fallback
+
+  return data.map((row) => {
+    const rawCod = String(isRawCsv ? row[cCod] : row.codigo || '')
+    const rawClassificacao = String(isRawCsv ? row[cClass] : row.classificacao || '')
+    const rawNome = String(isRawCsv ? row[cNome] : row.nome || '')
+    const rawMascara = String(isRawCsv ? row[cMasc] : row.mascara || '')
+
+    // Aplica máscara na classificação
+    let classif = aplicarMascaraAoCodigo(rawClassificacao, mascaraPadrao)
+    classif = classif.replace(/,/g, '.')
+
+    // Cria a descrição: Classificação - Nome
+    const descricao = `${classif} - ${rawNome}`
+
+    return {
+      importacao_id: importacaoId,
+      codigo: rawCod,
+      classificacao: classif,
+      nome: rawNome,
+      descricao: descricao,
+      mascara: rawMascara || mascaraPadrao,
+    }
+  })
+}
+
+async function parseCsvFile(file: File): Promise<any[]> {
+  try {
+    const text = await file.text()
+    const lines = text.split(/\r?\n/)
+    return lines.map((line) => line.split(/[;,]/))
+  } catch (e) {
+    return []
+  }
+}
+// --- FIM LÓGICA VBA ---
+
 function generateStepData(step: number, importacaoId: string) {
   switch (step) {
-    case 1: // Plano de Contas
+    case 1: // Plano de Contas Mock raw data
       return Array.from({ length: 15 }).map((_, i) => ({
-        importacao_id: importacaoId,
-        codigo: `1.01.${i + 1}`,
-        classificacao: 'Ativo',
+        codigo: `10100${i + 1}`,
+        classificacao: `101${(i + 1).toString().padStart(2, '0')}`,
         nome: `Conta Exemplo ${i + 1}`,
-        descricao: 'Conta simulada do plano de contas',
-        mascara: `1.01.${(i + 1).toString().padStart(2, '0')}`,
+        mascara: `1.01.00`,
       }))
     case 2: // Balancete Domínio
       return Array.from({ length: 15 }).map((_, i) => ({
@@ -85,7 +207,7 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
   results: [],
   summary: null,
 
-  uploadFile: async (step, _file) => {
+  uploadFile: async (step, file) => {
     let { importacaoId } = get()
 
     if (!importacaoId) {
@@ -113,8 +235,24 @@ export const useReconciliationStore = create<ReconciliationStore>((set, get) => 
     const tableName = tableNames[step]
     if (!tableName) return
 
-    // Generating DB valid structure simulating a parsed CSV/XLSX
-    const dataToInsert = generateStepData(step, importacaoId)
+    let dataToInsert: any[] = []
+
+    // Lógica para processar arquivo real ou mock
+    if (step === 1) {
+      // Se for CSV ou TXT, tenta processar o arquivo. Senão usa o mock para demonstração.
+      let rawData = []
+      if (file && (file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+        rawData = await parseCsvFile(file)
+        if (rawData.length > 1) {
+          rawData = rawData.slice(1) // Ignora cabeçalho
+        }
+      } else {
+        rawData = generateStepData(step, importacaoId)
+      }
+      dataToInsert = processarPlanoContas(rawData, importacaoId)
+    } else {
+      dataToInsert = generateStepData(step, importacaoId)
+    }
 
     // Clear old data for this import & step
     await supabase.from(tableName).delete().eq('importacao_id', importacaoId)

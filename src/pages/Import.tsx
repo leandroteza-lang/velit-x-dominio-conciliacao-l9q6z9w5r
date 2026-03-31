@@ -31,6 +31,14 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { PreviewTable } from '@/components/PreviewTable'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { toast } from 'sonner'
 import { useReconciliationStore } from '@/stores/useReconciliationStore'
 import { supabase } from '@/lib/supabase/client'
@@ -491,6 +499,61 @@ export default function ImportPage() {
               <div className="p-8 flex justify-center items-center h-full">
                 <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
               </div>
+            ) : fullViewStep === 1 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#003366] hover:bg-[#003366]">
+                    {previewHeaders.map((h, i) => (
+                      <TableHead
+                        key={i}
+                        className="text-white font-bold text-center border border-slate-700"
+                      >
+                        {h}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {previewData.map((row, i) => {
+                    const niveisConta = (row.classificacao || '').split('.').length
+                    const niveisMascara = (row.mascara || '').split('.').length
+                    const isHighlighted = niveisConta <= niveisMascara - 1
+
+                    return (
+                      <TableRow
+                        key={i}
+                        className={cn(
+                          isHighlighted
+                            ? 'bg-[#003366] text-white hover:bg-[#004080]'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
+                        )}
+                      >
+                        {CARDS.find((c) => c.step === 1)?.columns.map((col, j) => (
+                          <TableCell
+                            key={j}
+                            className={cn(
+                              'border border-slate-200 dark:border-slate-800',
+                              col === 'codigo' && 'text-center',
+                            )}
+                          >
+                            {row[col]}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    )
+                  })}
+                  {previewData.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={previewHeaders.length}
+                        className="text-center py-8 text-slate-500"
+                      >
+                        Nenhum registro encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             ) : (
               <PreviewTable headers={previewHeaders} data={previewData} />
             )}
