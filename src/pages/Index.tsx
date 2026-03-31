@@ -13,37 +13,37 @@ import { useReconciliationStore } from '@/stores/useReconciliationStore'
 const STEPS = [
   {
     id: 1,
-    title: 'Plano de Contas',
+    title: 'PASSO 1: Plano de Contas',
     key: 'plano',
     headers: ['Código', 'Classificação', 'Nome', 'Descrição', 'Máscara'],
   },
   {
     id: 2,
-    title: 'Balancete Domínio',
+    title: 'PASSO 2: Balancete Domínio',
     key: 'balancete_dominio',
     headers: ['Código', 'Classificação', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
   },
   {
     id: 3,
-    title: 'Balancete VELIT',
+    title: 'PASSO 3: Balancete VELIT',
     key: 'balancete_velit',
     headers: ['Conta Contábil', 'Descrição', 'Saldo Anterior', 'Débito', 'Crédito', 'Saldo Atual'],
   },
   {
     id: 4,
-    title: 'Conciliação Automática',
+    title: 'PASSO 4: Conciliação',
     key: 'conciliacao',
     headers: ['Conta Contábil', 'Descrição', 'Saldo Domínio', 'Saldo VELIT', 'Diferença', 'Status'],
   },
   {
     id: 5,
-    title: 'Razão Domínio',
+    title: 'PASSO 5: Razão Domínio',
     key: 'razao_dominio',
     headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
   },
   {
     id: 6,
-    title: 'Razão VELIT',
+    title: 'PASSO 6: Razão VELIT',
     key: 'razao_velit',
     headers: ['Conta', 'Data', 'Histórico', 'Débito', 'Crédito', 'Saldo'],
   },
@@ -97,7 +97,7 @@ export default function Index() {
   }
 
   const isStepValid = () => {
-    if (step === 4) return !isProcessingStep4
+    if (step === 4) return hasProcessedStep4 && !isProcessingStep4
     return !!uploaded[step]
   }
 
@@ -135,7 +135,7 @@ export default function Index() {
                 {step > s.id ? <Check className="h-4 w-4" /> : s.id}
               </div>
               <span
-                className={`mt-2 text-[10px] sm:text-xs text-center max-w-[50px] sm:max-w-[80px] leading-tight font-medium transition-colors ${
+                className={`mt-2 text-[10px] sm:text-xs text-center max-w-[80px] sm:max-w-[120px] leading-tight font-medium transition-colors ${
                   step >= s.id ? 'text-foreground' : 'text-muted-foreground'
                 }`}
               >
@@ -149,8 +149,8 @@ export default function Index() {
       <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200 fill-mode-both">
         <div className="mb-4 space-y-2">
           <div className="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400">
-            <span>Passo Atual: {currentStep.title}</span>
-            <span>Passo {step} de 6</span>
+            <span>{currentStep.title}</span>
+            <span>Step {step} of 6</span>
           </div>
           <Progress value={progress} className="h-2" />
         </div>
@@ -252,7 +252,16 @@ export default function Index() {
             </Button>
           ) : (
             <Button
-              disabled={!uploaded[6] || isProcessing}
+              disabled={
+                !(
+                  uploaded[1] &&
+                  uploaded[2] &&
+                  uploaded[3] &&
+                  hasProcessedStep4 &&
+                  uploaded[5] &&
+                  uploaded[6]
+                ) || isProcessing
+              }
               onClick={handleConfirm}
               size="lg"
               className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[200px]"
