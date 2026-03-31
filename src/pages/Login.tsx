@@ -9,8 +9,8 @@ import { toast } from 'sonner'
 
 export default function Login() {
   const { signIn } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('leandro_teza@hotmail.com')
+  const [password, setPassword] = useState('securepassword123')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
