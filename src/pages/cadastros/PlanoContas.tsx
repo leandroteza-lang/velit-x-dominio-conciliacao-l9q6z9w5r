@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import {
@@ -37,10 +46,11 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Layers,
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 
 export default function PlanoContas() {
   const { user } = useAuth()
@@ -50,6 +60,10 @@ export default function PlanoContas() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastSelected, setLastSelected] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+
+  // Batch Update State
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
+  const [batchConfig, setBatchConfig] = useState({ prefix: '', tipo: '', natureza: '' })
 
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'classificacao',
@@ -68,7 +82,12 @@ export default function PlanoContas() {
     finalidade: '',
     nivel_tipo: 'SINTETICA',
   })
-  const [autoNivel, setAutoNivel] = useState(true)
+
+  // Virtualization State
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const rowHeight = 40
+  const overscan = 15
 
   const fetchContas = async () => {
     if (!user) return
@@ -139,6 +158,17 @@ export default function PlanoContas() {
     return sortableItems
   }, [filteredContas, sortConfig])
 
+  // Virtualization Calculations
+  const clientHeight = containerRef.current?.clientHeight || 600
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
+  const endIndex = Math.min(
+    sortedContas.length,
+    Math.ceil((scrollTop + clientHeight) / rowHeight) + overscan,
+  )
+  const visibleContas = sortedContas.slice(startIndex, endIndex)
+  const topSpacer = startIndex * rowHeight
+  const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
+
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
       key,
@@ -188,10 +218,39 @@ export default function PlanoContas() {
     fetchContas()
   }
 
+  const handleBatchUpdate = async () => {
+    if (!batchConfig.prefix || (!batchConfig.tipo && !batchConfig.natureza)) {
+      toast.error('Preencha o prefixo e ao menos um campo para atualizar.')
+      return
+    }
+
+    const updates: any = {}
+    if (batchConfig.tipo) updates.tipo = batchConfig.tipo
+    if (batchConfig.natureza) updates.natureza = batchConfig.natureza
+
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('plano_contas')
+        .update(updates)
+        .like('classificacao', `${batchConfig.prefix}%`)
+        .eq('user_id', user?.id)
+
+      if (error) throw error
+      toast.success('Contas atualizadas em lote com sucesso!')
+      setBatchDialogOpen(false)
+      fetchContas()
+    } catch (err: any) {
+      toast.error('Erro ao atualizar em lote: ' + err.message)
+      setLoading(false)
+    }
+  }
+
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    // Mask Validation
+    // Mask Validation & Auto Strict Level Calculation
+    let strictNivel = formData.nivel_tipo
     if (expectedMask && formData.classificacao) {
       const parts = formData.classificacao.split('.')
       let valid = true
@@ -206,9 +265,10 @@ export default function PlanoContas() {
         )
         return
       }
+      strictNivel = parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
     }
 
-    const payload = { ...formData, user_id: user?.id }
+    const payload = { ...formData, nivel_tipo: strictNivel, user_id: user?.id }
 
     try {
       if (editingConta?.id) {
@@ -227,12 +287,6 @@ export default function PlanoContas() {
 
   const handleFormChange = (field: string, value: string) => {
     let updates: any = { [field]: value }
-
-    if (field === 'classificacao' && autoNivel && expectedMask) {
-      const parts = value.split('.')
-      updates.nivel_tipo = parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
-    }
-
     setFormData((prev) => ({ ...prev, ...updates }))
   }
 
@@ -248,7 +302,6 @@ export default function PlanoContas() {
       finalidade: conta.finalidade || '',
       nivel_tipo: conta.nivel_tipo || 'SINTETICA',
     })
-    setAutoNivel(false) // Disable auto-calc when editing to prevent unwanted overrides
     setSheetOpen(true)
   }
 
@@ -264,59 +317,13 @@ export default function PlanoContas() {
       finalidade: '',
       nivel_tipo: 'SINTETICA',
     })
-    setAutoNivel(true)
     setSheetOpen(true)
   }
 
-  const exportExcel = async () => {
-    try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs' as any)
-      const exportData = sortedContas.map((c) => ({
-        Código: c.codigo,
-        Classificação: c.classificacao,
-        Nome: c.nome,
-        Nível: c.nivel_tipo,
-        Tipo: c.tipo,
-        Natureza: c.natureza,
-        Finalidade: c.finalidade,
-      }))
-      const ws = XLSX.utils.json_to_sheet(exportData)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Plano de Contas')
-      XLSX.writeFile(wb, 'Plano_de_Contas.xlsx')
-    } catch (err) {
-      toast.error('Erro ao gerar Excel')
-    }
-  }
-
-  const exportPDF = () => {
-    const win = window.open('', '_blank')
-    if (!win) return
-    const html = `
-      <html><head><title>Plano de Contas</title>
-      <style>
-        body { font-family: sans-serif; font-size: 11px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
-        th { background: #f4f4f5; }
-      </style></head><body>
-      <h2>Plano de Contas</h2>
-      <table>
-        <tr><th>Código</th><th>Classificação</th><th>Nome</th><th>Nível</th><th>Tipo</th><th>Natureza</th></tr>
-        ${sortedContas
-          .map(
-            (c) => `<tr>
-          <td>${c.codigo || ''}</td><td>${c.classificacao || ''}</td><td>${c.nome || ''}</td>
-          <td>${c.nivel_tipo || ''}</td><td>${c.tipo || ''}</td><td>${c.natureza || ''}</td>
-        </tr>`,
-          )
-          .join('')}
-      </table>
-      <script>window.print(); window.setTimeout(window.close, 500);</script>
-      </body></html>
-    `
-    win.document.write(html)
-    win.document.close()
+  const getCalculatedLevel = (classificacao: string) => {
+    if (!expectedMask || !classificacao) return 'SINTETICA'
+    const parts = classificacao.split('.')
+    return parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
   }
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
@@ -346,17 +353,72 @@ export default function PlanoContas() {
               <Trash2 className="w-4 h-4 mr-2" /> Excluir ({selected.size})
             </Button>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" /> Exportar
+
+          <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="secondary"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
+              >
+                <Layers className="w-4 h-4 mr-2" /> Atualização em Lote
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportExcel}>Exportar para Excel</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportPDF}>Exportar para PDF</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Atualização em Lote</DialogTitle>
+                <DialogDescription>
+                  Defina regras baseadas no início da classificação para atualizar várias contas
+                  simultaneamente.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Classificação Iniciada Em (Ex: 1 ou 1.1)</Label>
+                  <Input
+                    value={batchConfig.prefix}
+                    onChange={(e) => setBatchConfig({ ...batchConfig, prefix: e.target.value })}
+                    placeholder="Ex: 1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Definir Tipo</Label>
+                  <select
+                    value={batchConfig.tipo}
+                    onChange={(e) => setBatchConfig({ ...batchConfig, tipo: e.target.value })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Não alterar</option>
+                    <option value="DEVEDORA">Devedora</option>
+                    <option value="CREDORA">Credora</option>
+                    <option value="AMBAS">Ambas</option>
+                    <option value="OUTROS">Outros</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Definir Natureza</Label>
+                  <select
+                    value={batchConfig.natureza}
+                    onChange={(e) => setBatchConfig({ ...batchConfig, natureza: e.target.value })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Não alterar</option>
+                    <option value="ATIVO">Ativo</option>
+                    <option value="PASSIVO">Passivo</option>
+                    <option value="RECEITAS">Receitas</option>
+                    <option value="DESPESAS">Despesas</option>
+                    <option value="OUTROS">Outros</option>
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleBatchUpdate}>Aplicar em Lote</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button onClick={openNew}>
             <Plus className="w-4 h-4 mr-2" /> Adicionar Conta
           </Button>
@@ -376,19 +438,23 @@ export default function PlanoContas() {
           </div>
           <p className="text-xs text-muted-foreground hidden sm:block">
             Dica: Use <kbd className="px-1 bg-slate-100 rounded border">Shift</kbd> + Click para
-            selecionar várias contas.
+            seleção múltipla.
           </p>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div
+          className="flex-1 overflow-auto bg-slate-50/30 dark:bg-slate-950 relative"
+          ref={containerRef}
+          onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        >
           {loading ? (
             <div className="h-full flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
             <Table>
-              <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
-                <TableRow>
+              <TableHeader className="sticky top-0 bg-slate-100 dark:bg-slate-900 shadow-sm z-10 border-b border-slate-300 dark:border-slate-700">
+                <TableRow className="border-0">
                   <TableHead className="w-10 text-center px-2 py-2">
                     <Checkbox
                       checked={sortedContas.length > 0 && selected.size === sortedContas.length}
@@ -396,19 +462,19 @@ export default function PlanoContas() {
                     />
                   </TableHead>
                   <TableHead
-                    className="w-24 px-2 py-2 cursor-pointer hover:bg-slate-50 select-none"
+                    className="w-20 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
                     onClick={() => handleSort('codigo')}
                   >
                     Código <SortIcon columnKey="codigo" />
                   </TableHead>
                   <TableHead
-                    className="w-32 px-2 py-2 cursor-pointer hover:bg-slate-50 select-none"
+                    className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
                     onClick={() => handleSort('classificacao')}
                   >
                     Classificação <SortIcon columnKey="classificacao" />
                   </TableHead>
                   <TableHead
-                    className="px-2 py-2 cursor-pointer hover:bg-slate-50 select-none"
+                    className="px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
                     onClick={() => handleSort('nome')}
                   >
                     Nome <SortIcon columnKey="nome" />
@@ -416,88 +482,117 @@ export default function PlanoContas() {
                   <TableHead className="w-24 px-2 py-2">Nível</TableHead>
                   <TableHead className="w-24 px-2 py-2">Tipo</TableHead>
                   <TableHead className="w-28 px-2 py-2">Natureza</TableHead>
-                  <TableHead className="w-20 px-2 py-2 text-right">Ações</TableHead>
+                  <TableHead className="w-16 px-2 py-2 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedContas.map((conta) => (
-                  <TableRow
-                    key={conta.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
-                  >
-                    <TableCell className="text-center px-2 py-1.5">
-                      <Checkbox
-                        checked={selected.has(conta.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        onCheckedChange={(_, e) => {
-                          // Use nativeEvent to get shiftKey state since onCheckedChange doesn't provide it
-                          const isShift = (window.event as MouseEvent)?.shiftKey || false
-                          toggleSelect(conta.id, isShift)
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-700 dark:text-slate-300 text-xs px-2 py-1.5 whitespace-nowrap">
-                      {conta.codigo}
-                    </TableCell>
-                    <TableCell className="text-xs px-2 py-1.5 whitespace-nowrap font-mono">
-                      {conta.classificacao}
-                    </TableCell>
-                    <TableCell className="text-sm px-2 py-1.5">
-                      {conta.finalidade ? (
-                        <Tooltip delayDuration={300}>
-                          <TooltipTrigger className="text-left cursor-help truncate block max-w-[300px]">
-                            {conta.nome}
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-xs whitespace-normal">
-                            <p className="font-semibold text-xs mb-1">Finalidade:</p>
-                            <p className="text-xs text-slate-200">{conta.finalidade}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="truncate block max-w-[300px]">{conta.nome}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-2 py-1.5">
-                      {conta.nivel_tipo && (
-                        <span
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${conta.nivel_tipo === 'ANALITICA' ? 'bg-purple-50 text-purple-700 ring-purple-700/10' : 'bg-slate-50 text-slate-600 ring-slate-500/10'}`}
-                        >
-                          {conta.nivel_tipo}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-2 py-1.5">
-                      {conta.tipo && (
-                        <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                          {conta.tipo}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs px-2 py-1.5 text-slate-500">
-                      {conta.natureza || '-'}
-                    </TableCell>
-                    <TableCell className="text-right px-2 py-1.5">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => openEdit(conta)}
-                        >
-                          <Edit className="w-3.5 h-3.5 text-slate-500 hover:text-primary" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleDeleteIndividual(conta.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                {topSpacer > 0 && (
+                  <TableRow className="border-0 hover:bg-transparent">
+                    <TableCell colSpan={8} className="p-0 border-0" style={{ height: topSpacer }} />
                   </TableRow>
-                ))}
+                )}
+                {visibleContas.map((conta) => {
+                  const levels = conta.classificacao ? conta.classificacao.split('.').length : 0
+                  const isSinteticaVisual = levels <= 4
+                  const calculatedLevel = getCalculatedLevel(conta.classificacao)
+
+                  return (
+                    <TableRow
+                      key={conta.id}
+                      style={{ height: rowHeight }}
+                      className={cn(
+                        'hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors group',
+                        'border-b border-slate-300 dark:border-slate-700',
+                        isSinteticaVisual
+                          ? 'bg-blue-50/60 dark:bg-blue-900/20'
+                          : 'bg-white dark:bg-slate-900',
+                      )}
+                    >
+                      <TableCell className="text-center px-2 py-1.5">
+                        <Checkbox
+                          checked={selected.has(conta.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(_, e) => {
+                            const isShift = (window.event as MouseEvent)?.shiftKey || false
+                            toggleSelect(conta.id, isShift)
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium text-slate-700 dark:text-slate-300 text-xs px-2 py-1.5 whitespace-nowrap">
+                        {conta.codigo}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 py-1.5 whitespace-nowrap font-mono">
+                        {conta.classificacao}
+                      </TableCell>
+                      <TableCell className="text-sm px-2 py-1.5 max-w-[200px] md:max-w-[400px]">
+                        <div className="truncate w-full">
+                          {conta.finalidade ? (
+                            <Tooltip delayDuration={300}>
+                              <TooltipTrigger className="text-left cursor-help truncate w-full block">
+                                {conta.nome}
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="right"
+                                className="max-w-xs whitespace-normal bg-slate-800 text-white"
+                              >
+                                <p className="font-semibold text-xs mb-1">Finalidade:</p>
+                                <p className="text-xs text-slate-200">{conta.finalidade}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="truncate w-full block">{conta.nome}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-2 py-1.5">
+                        <span
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${calculatedLevel === 'ANALITICA' ? 'bg-purple-50 text-purple-700 ring-purple-700/20' : 'bg-slate-100 text-slate-700 ring-slate-500/20'}`}
+                        >
+                          {calculatedLevel}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-2 py-1.5">
+                        {conta.tipo && (
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-700/20">
+                            {conta.tipo}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 py-1.5 text-slate-600 font-medium">
+                        {conta.natureza || '-'}
+                      </TableCell>
+                      <TableCell className="text-right px-2 py-1.5">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => openEdit(conta)}
+                          >
+                            <Edit className="w-3.5 h-3.5 text-slate-500 hover:text-primary" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleDeleteIndividual(conta.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {bottomSpacer > 0 && (
+                  <TableRow className="border-0 hover:bg-transparent">
+                    <TableCell
+                      colSpan={8}
+                      className="p-0 border-0"
+                      style={{ height: bottomSpacer }}
+                    />
+                  </TableRow>
+                )}
                 {sortedContas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
@@ -543,7 +638,7 @@ export default function PlanoContas() {
                 <Label htmlFor="classificacao">Classificação</Label>
                 {expectedMask && (
                   <span className="text-[10px] text-muted-foreground font-mono">
-                    Padrão: {expectedMask.join('.')}
+                    Padrão Detectado: {expectedMask.join('.')}
                   </span>
                 )}
               </div>
@@ -565,38 +660,27 @@ export default function PlanoContas() {
               />
             </div>
 
-            <div className="space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100">
+            <div className="space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200">
               <div className="flex items-center justify-between">
-                <Label htmlFor="nivel_tipo" className="font-semibold">
+                <Label
+                  htmlFor="nivel_tipo"
+                  className="font-semibold text-slate-700 dark:text-slate-300"
+                >
                   Nível da Conta
                 </Label>
-                <div className="flex items-center space-x-2">
-                  <Switch id="auto-nivel" checked={autoNivel} onCheckedChange={setAutoNivel} />
-                  <Label
-                    htmlFor="auto-nivel"
-                    className="text-xs font-normal text-muted-foreground cursor-pointer"
-                  >
-                    Auto-calcular
-                  </Label>
-                </div>
+                <span className="text-[10px] font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                  Cálculo Automático
+                </span>
               </div>
-              <select
-                id="nivel_tipo"
-                value={formData.nivel_tipo}
-                onChange={(e) => handleFormChange('nivel_tipo', e.target.value)}
-                disabled={autoNivel}
-                className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-              >
-                <option value="SINTETICA">Sintética (Agrupadora)</option>
-                <option value="ANALITICA">Analítica (Lançamentos)</option>
-              </select>
-              {autoNivel && expectedMask && formData.classificacao && (
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  O nível foi definido automaticamente porque a conta possui{' '}
-                  {formData.classificacao.split('.').length} partes de um total de{' '}
-                  {expectedMask.length} possíveis no plano.
-                </p>
-              )}
+              <Input
+                value={getCalculatedLevel(formData.classificacao)}
+                disabled
+                className="bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+                O nível é definido rigorosamente com base na máscara do seu plano de contas. Contas
+                com {expectedMask?.length || 'X'} níveis são consideradas Analíticas.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

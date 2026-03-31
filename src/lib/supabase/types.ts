@@ -298,6 +298,7 @@ export type Database = {
           importacao_id: string | null
           mascara: string | null
           natureza: string | null
+          nivel_tipo: string | null
           nome: string | null
           tipo: string | null
           user_id: string | null
@@ -311,6 +312,7 @@ export type Database = {
           importacao_id?: string | null
           mascara?: string | null
           natureza?: string | null
+          nivel_tipo?: string | null
           nome?: string | null
           tipo?: string | null
           user_id?: string | null
@@ -324,6 +326,7 @@ export type Database = {
           importacao_id?: string | null
           mascara?: string | null
           natureza?: string | null
+          nivel_tipo?: string | null
           nome?: string | null
           tipo?: string | null
           user_id?: string | null
@@ -743,6 +746,7 @@ export const Constants = {
 //   tipo: text (nullable)
 //   natureza: text (nullable)
 //   finalidade: text (nullable)
+//   nivel_tipo: text (nullable)
 // Table: razao_conferencia
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
