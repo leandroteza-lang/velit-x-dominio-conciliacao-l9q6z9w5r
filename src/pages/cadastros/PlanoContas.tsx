@@ -178,6 +178,38 @@ export default function PlanoContas() {
         fetchMore = false
       }
     }
+
+    // Pre-calculate structure to avoid massive CPU overhead during renders
+    let maxParts = 0
+    let standardClassificacao = ''
+    allData.forEach((c) => {
+      if (c.classificacao) {
+        const parts = c.classificacao.split('.')
+        if (parts.length > maxParts) {
+          maxParts = parts.length
+          standardClassificacao = c.classificacao
+        }
+      }
+    })
+    const mask = standardClassificacao
+      ? standardClassificacao.split('.').map((p) => p.length)
+      : null
+    const expectedDots = mask ? mask.length - 1 : 0
+
+    allData.forEach((c) => {
+      if (c.classificacao) {
+        let dots = 0
+        for (let i = 0; i < c.classificacao.length; i++) {
+          if (c.classificacao[i] === '.') dots++
+        }
+        c._calculatedLevel = dots === expectedDots ? 'ANALITICA' : 'SINTETICA'
+        c._levels = dots + 1
+      } else {
+        c._calculatedLevel = 'SINTETICA'
+        c._levels = 0
+      }
+    })
+
     setContas(allData)
     setLoading(false)
   }
@@ -217,111 +249,126 @@ export default function PlanoContas() {
   )
 
   const filteredContas = useMemo(() => {
+    const finalidadeNorm = normalize(deferredFilterFinalidade)
+    const searchNorm = normalize(deferredSearch)
+
     const hasStrictFilters =
       filterNivel !== 'ALL' ||
       filterTipo !== 'ALL' ||
       filterNatureza !== 'ALL' ||
-      deferredFilterFinalidade !== ''
+      finalidadeNorm !== ''
 
-    const finalidadeNorm = normalize(deferredFilterFinalidade)
-    const searchNorm = normalize(deferredSearch)
+    if (!searchNorm && !hasStrictFilters) {
+      return contas
+    }
 
-    const baseFilteredIds = new Set<string>()
-    const directMatchIds = new Set<string>()
-    const parentClassificacoes = new Set<string>()
-    const syntheticPrefixes: string[] = []
+    const matchedParents = new Set<string>()
+    const matchedSynthetics = new Set<string>()
+    const result: any[] = []
 
-    for (let i = 0; i < contas.length; i++) {
-      const c = contas[i]
-      let passStrict = true
+    if (searchNorm) {
+      for (let i = 0; i < contas.length; i++) {
+        const c = contas[i]
+        let passStrict = true
 
-      if (hasStrictFilters) {
-        if (filterNivel !== 'ALL' && getCalculatedLevel(c.classificacao) !== filterNivel)
-          passStrict = false
-        else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
-        else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza) passStrict = false
-        else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
-          passStrict = false
-      }
+        if (hasStrictFilters) {
+          if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
+          else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
+          else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza)
+            passStrict = false
+          else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
+            passStrict = false
+        }
 
-      if (passStrict) {
-        baseFilteredIds.add(c.id)
+        if (passStrict) {
+          const isMatch =
+            fuzzyMatch(searchNorm, c._normNome) ||
+            fuzzyMatch(searchNorm, c._normCodigo) ||
+            fuzzyMatch(searchNorm, c._normClassificacao) ||
+            fuzzyMatch(searchNorm, c._normFinalidade)
 
-        if (searchNorm) {
-          const matchName = fuzzyMatch(searchNorm, c._normNome)
-          const matchCod = !matchName && fuzzyMatch(searchNorm, c._normCodigo)
-          const matchClass = !matchName && !matchCod && fuzzyMatch(searchNorm, c._normClassificacao)
-          const matchFin =
-            !matchName && !matchCod && !matchClass && fuzzyMatch(searchNorm, c._normFinalidade)
-
-          if (matchName || matchCod || matchClass || matchFin) {
-            directMatchIds.add(c.id)
+          if (isMatch) {
+            c._isMatch = true
             if (c.classificacao) {
               const parts = c.classificacao.split('.')
               let current = ''
               for (let j = 0; j < parts.length - 1; j++) {
                 current = current ? `${current}.${parts[j]}` : parts[j]
-                parentClassificacoes.add(current)
+                matchedParents.add(current)
               }
-              if (getCalculatedLevel(c.classificacao) === 'SINTETICA') {
-                syntheticPrefixes.push(c.classificacao + '.')
+              if (c._calculatedLevel === 'SINTETICA') {
+                matchedSynthetics.add(c.classificacao)
               }
+            }
+          } else {
+            c._isMatch = false
+          }
+        } else {
+          c._isMatch = false
+        }
+      }
+
+      for (let i = 0; i < contas.length; i++) {
+        const c = contas[i]
+
+        if (c._isMatch) {
+          result.push(c)
+          continue
+        }
+
+        if (c.classificacao && matchedParents.has(c.classificacao)) {
+          result.push(c)
+          continue
+        }
+
+        if (c.classificacao) {
+          const parts = c.classificacao.split('.')
+          let current = ''
+          let isChildOfMatchedSynthetic = false
+          for (let j = 0; j < parts.length - 1; j++) {
+            current = current ? `${current}.${parts[j]}` : parts[j]
+            if (matchedSynthetics.has(current)) {
+              isChildOfMatchedSynthetic = true
+              break
+            }
+          }
+
+          if (isChildOfMatchedSynthetic) {
+            let passStrict = true
+            if (hasStrictFilters) {
+              if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
+              else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
+              else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza)
+                passStrict = false
+              else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
+                passStrict = false
+            }
+            if (passStrict) {
+              result.push(c)
             }
           }
         }
       }
-    }
-
-    if (!searchNorm) {
-      if (!hasStrictFilters) return contas
-      const result = []
-      for (let i = 0; i < contas.length; i++) {
-        if (baseFilteredIds.has(contas[i].id)) result.push(contas[i])
-      }
       return result
     }
 
-    const result = []
+    // No search, only strict filters
     for (let i = 0; i < contas.length; i++) {
       const c = contas[i]
-      const inBase = baseFilteredIds.has(c.id)
-      const isParent = !!(c.classificacao && parentClassificacoes.has(c.classificacao))
+      let passStrict = true
 
-      if (hasStrictFilters && !inBase && !isParent) {
-        continue
-      }
+      if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
+      else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
+      else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza) passStrict = false
+      else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade)) passStrict = false
 
-      if (directMatchIds.has(c.id) || isParent) {
+      if (passStrict) {
         result.push(c)
-        continue
-      }
-
-      if (c.classificacao) {
-        let matchedPrefix = false
-        for (let p = 0; p < syntheticPrefixes.length; p++) {
-          if (c.classificacao.startsWith(syntheticPrefixes[p])) {
-            matchedPrefix = true
-            break
-          }
-        }
-        if (matchedPrefix) {
-          if (!hasStrictFilters || inBase) {
-            result.push(c)
-          }
-        }
       }
     }
 
     return result
-  }, [
-    contas,
-    deferredSearch,
-    filterNivel,
-    filterTipo,
-    filterNatureza,
-    deferredFilterFinalidade,
-    getCalculatedLevel,
-  ])
+  }, [contas, deferredSearch, filterNivel, filterTipo, filterNatureza, deferredFilterFinalidade])
 
   const sortedContas = useMemo(() => {
     const sortableItems = [...filteredContas]
@@ -367,7 +414,6 @@ export default function PlanoContas() {
   const visibleContas = sortedContas.slice(startIndex, endIndex)
   const topSpacer = startIndex * rowHeight
   const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
-  const deferredSearchNorm = normalize(deferredSearch)
 
   const logExport = (format: string) => {
     if (user) {
@@ -396,7 +442,7 @@ export default function PlanoContas() {
       const csvContent = [
         headers.join(';'),
         ...sortedContas.map((c) => {
-          const nivel = getCalculatedLevel(c.classificacao)
+          const nivel = c._calculatedLevel || getCalculatedLevel(c.classificacao)
           return [
             c.codigo || '',
             c.classificacao || '',
@@ -459,7 +505,7 @@ export default function PlanoContas() {
             <tbody>
               ${sortedContas
                 .map((c) => {
-                  const nivel = getCalculatedLevel(c.classificacao)
+                  const nivel = c._calculatedLevel || getCalculatedLevel(c.classificacao)
                   const isSintetica = nivel === 'SINTETICA'
                   return `<tr class="${isSintetica ? 'sintetica' : ''}">
                   <td>${c.codigo || ''}</td>
@@ -1130,7 +1176,10 @@ export default function PlanoContas() {
         <div
           className="flex-1 overflow-auto bg-slate-50/20 dark:bg-slate-950 relative"
           ref={containerRef}
-          onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+          onScroll={(e) => {
+            const target = e.currentTarget
+            requestAnimationFrame(() => setScrollTop(target.scrollTop))
+          }}
         >
           {loading ? (
             <div className="h-full flex items-center justify-center">
@@ -1187,8 +1236,11 @@ export default function PlanoContas() {
                   </TableRow>
                 )}
                 {visibleContas.map((conta) => {
-                  const levels = conta.classificacao ? conta.classificacao.split('.').length : 0
-                  const calculatedLevel = getCalculatedLevel(conta.classificacao)
+                  const levels =
+                    conta._levels ||
+                    (conta.classificacao ? conta.classificacao.split('.').length : 0)
+                  const calculatedLevel =
+                    conta._calculatedLevel || getCalculatedLevel(conta.classificacao)
 
                   let rowBgClass =
                     'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80'
@@ -1219,16 +1271,7 @@ export default function PlanoContas() {
                     }
                   }
 
-                  const isMatch =
-                    deferredSearch &&
-                    fuzzyMatch(
-                      deferredSearchNorm,
-                      (conta._normNome || '') +
-                        ' ' +
-                        (conta._normFinalidade || '') +
-                        ' ' +
-                        (conta._normCodigo || ''),
-                    )
+                  const isMatch = deferredSearch && conta._isMatch
 
                   return (
                     <TableRow
