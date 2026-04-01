@@ -825,7 +825,7 @@ export default function PlanoContas() {
             ) : (
               <RotateCcw className="w-4 h-4 mr-2" />
             )}
-            Desfazer
+            Desfazer Importação
           </Button>
 
           <DropdownMenu>
@@ -857,7 +857,7 @@ export default function PlanoContas() {
           </DropdownMenu>
 
           <Button onClick={openNew}>
-            <Plus className="w-4 h-4 mr-2" /> Adicionar
+            <Plus className="w-4 h-4 mr-2" /> Adicionar Conta
           </Button>
         </div>
       </div>
