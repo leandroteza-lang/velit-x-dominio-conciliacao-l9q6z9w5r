@@ -1,12 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useMemo,
-  useRef,
-  useCallback,
-  useDeferredValue,
-  useTransition,
-} from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -61,6 +53,10 @@ import {
   TrendingUp,
   TrendingDown,
   PieChartIcon,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -76,57 +72,54 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
 
-const normalize = (str?: string) =>
-  (str || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-
-const fuzzyMatch = (patternNorm: string, strNorm: string) => {
-  if (!patternNorm) return true
-  if (!strNorm) return false
-  if (strNorm.includes(patternNorm)) return true
-
-  let pIdx = 0
-  for (let sIdx = 0; sIdx < strNorm.length; sIdx++) {
-    if (strNorm[sIdx] === patternNorm[pIdx]) {
-      pIdx++
-    }
-    if (pIdx === patternNorm.length) return true
-  }
-  return false
-}
-
 export default function PlanoContas() {
   const { user } = useAuth()
   const [contas, setContas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [lastSelected, setLastSelected] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
 
-  // Advanced Filters State
+  // Pagination State
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(100)
+  const [totalCount, setTotalCount] = useState(0)
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  // Global Dashboard Stats
+  const [dashboardStats, setDashboardStats] = useState({
+    ATIVO: 0,
+    PASSIVO: 0,
+    RECEITAS: 0,
+    DESPESAS: 0,
+    OUTROS: 0,
+  })
+  const [expectedMask, setExpectedMask] = useState<number[] | null>(null)
+
+  // Filters State
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterNivel, setFilterNivel] = useState<string>('ALL')
   const [filterTipo, setFilterTipo] = useState<string>('ALL')
   const [filterNatureza, setFilterNatureza] = useState<string>('ALL')
   const [filterFinalidade, setFilterFinalidade] = useState<string>('')
-
-  const deferredSearch = useDeferredValue(search)
-  const deferredFilterFinalidade = useDeferredValue(filterFinalidade)
-  const [isPending, startTransition] = useTransition()
-
-  // Batch Update State
-  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
-  const [batchConfig, setBatchConfig] = useState({ prefix: '', tipo: '', natureza: '' })
-
-  const [restoring, setRestoring] = useState(false)
-  const [restoreProgress, setRestoreProgress] = useState(0)
+  const [debouncedFinalidade, setDebouncedFinalidade] = useState('')
 
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'classificacao',
     direction: 'asc',
   })
+
+  // Selection
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [lastSelected, setLastSelected] = useState<string | null>(null)
+
+  // UI State
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
+  const [batchConfig, setBatchConfig] = useState({ prefix: '', tipo: '', natureza: '' })
+  const [restoring, setRestoring] = useState(false)
+  const [restoreProgress, setRestoreProgress] = useState(0)
+  const [exporting, setExporting] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Form State
   const [editingConta, setEditingConta] = useState<any>(null)
@@ -141,100 +134,137 @@ export default function PlanoContas() {
     nivel_tipo: 'SINTETICA',
   })
 
-  // Virtualization State
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const rowHeight = 40
-  const overscan = 15
+  // Debounce inputs
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFinalidade(filterFinalidade), 400)
+    return () => clearTimeout(t)
+  }, [filterFinalidade])
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, filterNivel, filterTipo, filterNatureza, debouncedFinalidade])
+
+  // Fix page out of bounds
+  useEffect(() => {
+    if (page > totalPages && totalPages > 0) {
+      setPage(totalPages)
+    }
+  }, [totalPages, page])
+
+  const fetchDashboardStatsAndMask = async () => {
+    if (!user) return
+    const natures = ['ATIVO', 'PASSIVO', 'RECEITAS', 'DESPESAS']
+    const stats = { ATIVO: 0, PASSIVO: 0, RECEITAS: 0, DESPESAS: 0, OUTROS: 0 }
+
+    await Promise.all(
+      natures.map(async (nat) => {
+        const { count } = await supabase
+          .from('plano_contas')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .ilike('natureza', nat)
+
+        if (count !== null) stats[nat as keyof typeof stats] = count
+      }),
+    )
+
+    const { count: total } = await supabase
+      .from('plano_contas')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    stats.OUTROS = Math.max(
+      0,
+      (total || 0) - stats.ATIVO - stats.PASSIVO - stats.RECEITAS - stats.DESPESAS,
+    )
+    setDashboardStats(stats)
+
+    const { data } = await supabase
+      .from('plano_contas')
+      .select('classificacao')
+      .eq('user_id', user.id)
+      .limit(1000)
+    if (data) {
+      let maxParts = 0
+      let standardClassificacao = ''
+      data.forEach((c) => {
+        if (c.classificacao) {
+          const parts = c.classificacao.split('.')
+          if (parts.length > maxParts) {
+            maxParts = parts.length
+            standardClassificacao = c.classificacao
+          }
+        }
+      })
+      const mask = standardClassificacao
+        ? standardClassificacao.split('.').map((p) => p.length)
+        : null
+      setExpectedMask(mask)
+    }
+  }
 
   const fetchContas = async () => {
     if (!user) return
     setLoading(true)
-    let allData: any[] = []
-    let from = 0
-    const step = 1000
-    let fetchMore = true
 
-    while (fetchMore) {
-      const { data } = await supabase
-        .from('plano_contas')
-        .select('*')
-        .eq('user_id', user.id)
-        .range(from, from + step - 1)
+    let query = supabase.from('plano_contas').select('*', { count: 'exact' }).eq('user_id', user.id)
 
-      if (data && data.length > 0) {
-        const normalizedData = data.map((c: any) => ({
-          ...c,
-          _normNome: normalize(c.nome),
-          _normCodigo: normalize(c.codigo),
-          _normClassificacao: normalize(c.classificacao),
-          _normFinalidade: normalize(c.finalidade),
-          _upperNatureza: (c.natureza || '').toUpperCase(),
-        }))
-        allData = [...allData, ...normalizedData]
-        from += step
-        if (data.length < step) fetchMore = false
-      } else {
-        fetchMore = false
-      }
+    if (debouncedSearch) {
+      query = query.or(
+        `codigo.ilike.%${debouncedSearch}%,nome.ilike.%${debouncedSearch}%,classificacao.ilike.%${debouncedSearch}%,finalidade.ilike.%${debouncedSearch}%`,
+      )
     }
+    if (filterTipo !== 'ALL') query = query.eq('tipo', filterTipo)
+    if (filterNatureza !== 'ALL') query = query.ilike('natureza', filterNatureza)
+    if (debouncedFinalidade) query = query.ilike('finalidade', `%${debouncedFinalidade}%`)
+    if (filterNivel !== 'ALL') query = query.eq('nivel_tipo', filterNivel)
 
-    // Pre-calculate structure to avoid massive CPU overhead during renders
-    let maxParts = 0
-    let standardClassificacao = ''
-    allData.forEach((c) => {
-      if (c.classificacao) {
-        const parts = c.classificacao.split('.')
-        if (parts.length > maxParts) {
-          maxParts = parts.length
-          standardClassificacao = c.classificacao
-        }
-      }
-    })
-    const mask = standardClassificacao
-      ? standardClassificacao.split('.').map((p) => p.length)
-      : null
-    const expectedDots = mask ? mask.length - 1 : 0
+    query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
 
-    allData.forEach((c) => {
-      if (c.classificacao) {
-        let dots = 0
-        for (let i = 0; i < c.classificacao.length; i++) {
-          if (c.classificacao[i] === '.') dots++
-        }
-        c._calculatedLevel = dots === expectedDots ? 'ANALITICA' : 'SINTETICA'
-        c._levels = dots + 1
-      } else {
-        c._calculatedLevel = 'SINTETICA'
-        c._levels = 0
-      }
-    })
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    query = query.range(from, to)
 
-    setContas(allData)
+    const { data, count, error } = await query
+
+    if (error) {
+      toast.error('Erro ao buscar contas: ' + error.message)
+    } else {
+      setContas(data || [])
+      if (count !== null) setTotalCount(count)
+    }
     setLoading(false)
   }
 
   useEffect(() => {
-    fetchContas()
+    fetchDashboardStatsAndMask()
   }, [user])
 
-  const expectedMask = useMemo(() => {
-    if (contas.length === 0) return null
-    let maxParts = 0
-    let standardClassificacao = ''
-    contas.forEach((c) => {
-      if (c.classificacao) {
-        const parts = c.classificacao.split('.')
-        if (parts.length > maxParts) {
-          maxParts = parts.length
-          standardClassificacao = c.classificacao
-        }
-      }
-    })
-    return standardClassificacao ? standardClassificacao.split('.').map((p) => p.length) : null
-  }, [contas])
+  useEffect(() => {
+    fetchContas()
+  }, [
+    user,
+    page,
+    pageSize,
+    sortConfig,
+    debouncedSearch,
+    filterNivel,
+    filterTipo,
+    filterNatureza,
+    debouncedFinalidade,
+    refreshTrigger,
+  ])
 
-  const expectedDots = expectedMask ? expectedMask.length - 1 : 0
+  const refreshGlobalData = () => {
+    fetchDashboardStatsAndMask()
+    setRefreshTrigger((prev) => prev + 1)
+  }
 
   const getCalculatedLevel = useCallback(
     (classificacao?: string) => {
@@ -243,179 +273,22 @@ export default function PlanoContas() {
       for (let i = 0; i < classificacao.length; i++) {
         if (classificacao[i] === '.') dots++
       }
-      return dots === expectedDots ? 'ANALITICA' : 'SINTETICA'
+      return dots === expectedMask.length - 1 ? 'ANALITICA' : 'SINTETICA'
     },
-    [expectedMask, expectedDots],
+    [expectedMask],
   )
 
-  const filteredContas = useMemo(() => {
-    const finalidadeNorm = normalize(deferredFilterFinalidade)
-    const searchNorm = normalize(deferredSearch)
-
-    const hasStrictFilters =
-      filterNivel !== 'ALL' ||
-      filterTipo !== 'ALL' ||
-      filterNatureza !== 'ALL' ||
-      finalidadeNorm !== ''
-
-    if (!searchNorm && !hasStrictFilters) {
-      return contas
-    }
-
-    const matchedParents = new Set<string>()
-    const matchedSynthetics = new Set<string>()
-    const result: any[] = []
-
-    if (searchNorm) {
-      for (let i = 0; i < contas.length; i++) {
-        const c = contas[i]
-        let passStrict = true
-
-        if (hasStrictFilters) {
-          if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
-          else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
-          else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza)
-            passStrict = false
-          else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
-            passStrict = false
-        }
-
-        if (passStrict) {
-          const isMatch =
-            fuzzyMatch(searchNorm, c._normNome) ||
-            fuzzyMatch(searchNorm, c._normCodigo) ||
-            fuzzyMatch(searchNorm, c._normClassificacao) ||
-            fuzzyMatch(searchNorm, c._normFinalidade)
-
-          if (isMatch) {
-            c._isMatch = true
-            if (c.classificacao) {
-              const parts = c.classificacao.split('.')
-              let current = ''
-              for (let j = 0; j < parts.length - 1; j++) {
-                current = current ? `${current}.${parts[j]}` : parts[j]
-                matchedParents.add(current)
-              }
-              if (c._calculatedLevel === 'SINTETICA') {
-                matchedSynthetics.add(c.classificacao)
-              }
-            }
-          } else {
-            c._isMatch = false
-          }
-        } else {
-          c._isMatch = false
-        }
-      }
-
-      for (let i = 0; i < contas.length; i++) {
-        const c = contas[i]
-
-        if (c._isMatch) {
-          result.push(c)
-          continue
-        }
-
-        if (c.classificacao && matchedParents.has(c.classificacao)) {
-          result.push(c)
-          continue
-        }
-
-        if (c.classificacao) {
-          const parts = c.classificacao.split('.')
-          let current = ''
-          let isChildOfMatchedSynthetic = false
-          for (let j = 0; j < parts.length - 1; j++) {
-            current = current ? `${current}.${parts[j]}` : parts[j]
-            if (matchedSynthetics.has(current)) {
-              isChildOfMatchedSynthetic = true
-              break
-            }
-          }
-
-          if (isChildOfMatchedSynthetic) {
-            let passStrict = true
-            if (hasStrictFilters) {
-              if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
-              else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
-              else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza)
-                passStrict = false
-              else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
-                passStrict = false
-            }
-            if (passStrict) {
-              result.push(c)
-            }
-          }
-        }
-      }
-      return result
-    }
-
-    // No search, only strict filters
-    for (let i = 0; i < contas.length; i++) {
-      const c = contas[i]
-      let passStrict = true
-
-      if (filterNivel !== 'ALL' && c._calculatedLevel !== filterNivel) passStrict = false
-      else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
-      else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza) passStrict = false
-      else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade)) passStrict = false
-
-      if (passStrict) {
-        result.push(c)
-      }
-    }
-
-    return result
-  }, [contas, deferredSearch, filterNivel, filterTipo, filterNatureza, deferredFilterFinalidade])
-
-  const sortedContas = useMemo(() => {
-    const sortableItems = [...filteredContas]
-    sortableItems.sort((a, b) => {
-      const aVal = (a[sortConfig.key] || '').toString().toLowerCase()
-      const bVal = (b[sortConfig.key] || '').toString().toLowerCase()
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return sortableItems
-  }, [filteredContas, sortConfig])
-
-  const dashboardData = useMemo(() => {
-    const stats = { ATIVO: 0, PASSIVO: 0, RECEITAS: 0, DESPESAS: 0, OUTROS: 0 }
-
-    contas.forEach((c) => {
-      const nat = (c.natureza || '').toUpperCase()
-      if (nat === 'ATIVO') stats.ATIVO++
-      else if (nat === 'PASSIVO') stats.PASSIVO++
-      else if (nat === 'RECEITAS') stats.RECEITAS++
-      else if (nat === 'DESPESAS') stats.DESPESAS++
-      else stats.OUTROS++
-    })
-
-    const chartData = [
-      { name: 'Ativo', value: stats.ATIVO, color: '#3b82f6' },
-      { name: 'Passivo', value: stats.PASSIVO, color: '#ef4444' },
-      { name: 'Receitas', value: stats.RECEITAS, color: '#10b981' },
-      { name: 'Despesas', value: stats.DESPESAS, color: '#f59e0b' },
-      { name: 'Outros', value: stats.OUTROS, color: '#94a3b8' },
+  const chartData = useMemo(() => {
+    return [
+      { name: 'Ativo', value: dashboardStats.ATIVO, color: '#3b82f6' },
+      { name: 'Passivo', value: dashboardStats.PASSIVO, color: '#ef4444' },
+      { name: 'Receitas', value: dashboardStats.RECEITAS, color: '#10b981' },
+      { name: 'Despesas', value: dashboardStats.DESPESAS, color: '#f59e0b' },
+      { name: 'Outros', value: dashboardStats.OUTROS, color: '#94a3b8' },
     ].filter((d) => d.value > 0)
+  }, [dashboardStats])
 
-    return { stats, chartData }
-  }, [contas])
-
-  const clientHeight = containerRef.current?.clientHeight || 600
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
-  const endIndex = Math.min(
-    sortedContas.length,
-    Math.ceil((scrollTop + clientHeight) / rowHeight) + overscan,
-  )
-  const visibleContas = sortedContas.slice(startIndex, endIndex)
-  const topSpacer = startIndex * rowHeight
-  const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
-
-  const logExport = (format: string) => {
+  const logExport = (format: string, count: number) => {
     if (user) {
       supabase
         .from('export_history')
@@ -424,113 +297,166 @@ export default function PlanoContas() {
             user_id: user.id,
             file_name: `plano_contas_${new Date().toISOString().split('T')[0]}.${format.toLowerCase()}`,
             type: 'PLANO_CONTAS',
-            records_count: sortedContas.length,
+            records_count: count,
           },
         ])
         .then()
     }
   }
 
-  const handleExport = (format: 'CSV' | 'PDF' | 'BROWSER') => {
-    if (sortedContas.length === 0) {
+  const handleExport = async (format: 'CSV' | 'PDF' | 'BROWSER') => {
+    if (totalCount === 0) {
       toast.error('Não há contas para exportar.')
       return
     }
 
-    if (format === 'CSV') {
-      const headers = ['Código', 'Classificação', 'Nome', 'Nível', 'Tipo', 'Natureza', 'Finalidade']
-      const csvContent = [
-        headers.join(';'),
-        ...sortedContas.map((c) => {
-          const nivel = c._calculatedLevel || getCalculatedLevel(c.classificacao)
-          return [
-            c.codigo || '',
-            c.classificacao || '',
-            `"${(c.nome || '').replace(/"/g, '""')}"`,
-            nivel,
-            c.tipo || '',
-            c.natureza || '',
-            `"${(c.finalidade || '').replace(/"/g, '""')}"`,
-          ].join(';')
-        }),
-      ].join('\n')
+    setExporting(true)
+    const toastId = toast.loading('Preparando exportação, aguarde...')
 
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `plano_contas_${new Date().toISOString().split('T')[0]}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      logExport('CSV')
-    } else {
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Plano de Contas</title>
-          <style>
-            body { font-family: sans-serif; font-size: 12px; margin: 20px; color: #333; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-            th { background-color: #f4f4f4; font-weight: bold; }
-            h1 { font-size: 18px; margin-bottom: 5px; }
-            .meta { font-size: 11px; color: #666; margin-bottom: 20px; }
-            .sintetica { background-color: #f9fafb; font-weight: 600; }
-            @media print {
-              body { margin: 0; }
-              table { page-break-inside: auto; }
-              tr { page-break-inside: avoid; page-break-after: auto; }
-              thead { display: table-header-group; }
-              tfoot { display: table-footer-group; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Plano de Contas</h1>
-          <div class="meta">Exportado em: ${new Date().toLocaleString('pt-BR')} | Total de contas: ${sortedContas.length}</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Classificação</th>
-                <th>Nome</th>
-                <th>Nível</th>
-                <th>Tipo</th>
-                <th>Natureza</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sortedContas
-                .map((c) => {
-                  const nivel = c._calculatedLevel || getCalculatedLevel(c.classificacao)
-                  const isSintetica = nivel === 'SINTETICA'
-                  return `<tr class="${isSintetica ? 'sintetica' : ''}">
-                  <td>${c.codigo || ''}</td>
-                  <td>${c.classificacao || ''}</td>
-                  <td>${c.nome || ''}</td>
-                  <td>${nivel}</td>
-                  <td>${c.tipo || ''}</td>
-                  <td>${c.natureza || ''}</td>
-                </tr>`
-                })
-                .join('')}
-            </tbody>
-          </table>
-          ${format === 'PDF' ? '<script>window.onload = function() { window.print(); }</script>' : ''}
-        </body>
-        </html>
-      `
-      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const win = window.open(url, '_blank')
-      if (!win) {
-        toast.error('O navegador bloqueou a abertura da nova aba. Permita pop-ups para este site.')
-        return
+    try {
+      let allData: any[] = []
+      let from = 0
+      const step = 1000
+      let fetchMore = true
+
+      while (fetchMore) {
+        let query = supabase.from('plano_contas').select('*').eq('user_id', user?.id)
+
+        if (debouncedSearch) {
+          query = query.or(
+            `codigo.ilike.%${debouncedSearch}%,nome.ilike.%${debouncedSearch}%,classificacao.ilike.%${debouncedSearch}%,finalidade.ilike.%${debouncedSearch}%`,
+          )
+        }
+        if (filterTipo !== 'ALL') query = query.eq('tipo', filterTipo)
+        if (filterNatureza !== 'ALL') query = query.ilike('natureza', filterNatureza)
+        if (debouncedFinalidade) query = query.ilike('finalidade', `%${debouncedFinalidade}%`)
+        if (filterNivel !== 'ALL') query = query.eq('nivel_tipo', filterNivel)
+
+        query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
+        query = query.range(from, from + step - 1)
+
+        const { data, error } = await query
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          allData = [...allData, ...data]
+          from += step
+          if (data.length < step) fetchMore = false
+        } else {
+          fetchMore = false
+        }
       }
-      logExport(format)
+
+      toast.dismiss(toastId)
+
+      if (format === 'CSV') {
+        const headers = [
+          'Código',
+          'Classificação',
+          'Nome',
+          'Nível',
+          'Tipo',
+          'Natureza',
+          'Finalidade',
+        ]
+        const csvContent = [
+          headers.join(';'),
+          ...allData.map((c) => {
+            const nivel = c.nivel_tipo || getCalculatedLevel(c.classificacao)
+            return [
+              c.codigo || '',
+              c.classificacao || '',
+              `"${(c.nome || '').replace(/"/g, '""')}"`,
+              nivel,
+              c.tipo || '',
+              c.natureza || '',
+              `"${(c.finalidade || '').replace(/"/g, '""')}"`,
+            ].join(';')
+          }),
+        ].join('\n')
+
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+        const link = document.createElement('a')
+        const url = URL.createObjectURL(blob)
+        link.setAttribute('href', url)
+        link.setAttribute('download', `plano_contas_${new Date().toISOString().split('T')[0]}.csv`)
+        link.style.visibility = 'hidden'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Plano de Contas</title>
+            <style>
+              body { font-family: sans-serif; font-size: 12px; margin: 20px; color: #333; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+              th { background-color: #f4f4f4; font-weight: bold; }
+              h1 { font-size: 18px; margin-bottom: 5px; }
+              .meta { font-size: 11px; color: #666; margin-bottom: 20px; }
+              .sintetica { background-color: #f9fafb; font-weight: 600; }
+              @media print {
+                body { margin: 0; }
+                table { page-break-inside: auto; }
+                tr { page-break-inside: avoid; page-break-after: auto; }
+                thead { display: table-header-group; }
+                tfoot { display: table-footer-group; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Plano de Contas</h1>
+            <div class="meta">Exportado em: ${new Date().toLocaleString('pt-BR')} | Total de contas: ${allData.length}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Classificação</th>
+                  <th>Nome</th>
+                  <th>Nível</th>
+                  <th>Tipo</th>
+                  <th>Natureza</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allData
+                  .map((c) => {
+                    const nivel = c.nivel_tipo || getCalculatedLevel(c.classificacao)
+                    const isSintetica = nivel === 'SINTETICA'
+                    return `<tr class="${isSintetica ? 'sintetica' : ''}">
+                    <td>${c.codigo || ''}</td>
+                    <td>${c.classificacao || ''}</td>
+                    <td>${c.nome || ''}</td>
+                    <td>${nivel}</td>
+                    <td>${c.tipo || ''}</td>
+                    <td>${c.natureza || ''}</td>
+                  </tr>`
+                  })
+                  .join('')}
+              </tbody>
+            </table>
+            ${format === 'PDF' ? '<script>window.onload = function() { window.print(); }</script>' : ''}
+          </body>
+          </html>
+        `
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const win = window.open(url, '_blank')
+        if (!win) {
+          toast.error(
+            'O navegador bloqueou a abertura da nova aba. Permita pop-ups para este site.',
+          )
+        }
+      }
+      logExport(format, allData.length)
+    } catch (err: any) {
+      toast.dismiss(toastId)
+      toast.error('Erro na exportação: ' + err.message)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -626,9 +552,8 @@ export default function PlanoContas() {
 
       setRestoreProgress(100)
       toast.success('Plano de contas restaurado com sucesso!')
-      fetchContas()
+      refreshGlobalData()
     } catch (err: any) {
-      console.error(err)
       toast.error('Erro ao restaurar: ' + err.message)
     } finally {
       setTimeout(() => setRestoring(false), 500)
@@ -636,24 +561,20 @@ export default function PlanoContas() {
   }
 
   const handleNaturezaClick = (nat: string) => {
-    startTransition(() => {
-      setFilterNatureza(filterNatureza === nat ? 'ALL' : nat)
-    })
+    setFilterNatureza(filterNatureza === nat ? 'ALL' : nat)
   }
 
   const handleSort = (key: string) => {
-    startTransition(() => {
-      setSortConfig((prev) => ({
-        key,
-        direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-      }))
-    })
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }))
   }
 
   const toggleSelect = (id: string, shiftKey: boolean) => {
     const next = new Set(selected)
     if (shiftKey && lastSelected) {
-      const items = sortedContas.map((c) => c.id)
+      const items = contas.map((c) => c.id)
       const start = items.indexOf(lastSelected)
       const end = items.indexOf(id)
       if (start !== -1 && end !== -1) {
@@ -670,8 +591,8 @@ export default function PlanoContas() {
   }
 
   const toggleAll = () => {
-    if (selected.size === sortedContas.length) setSelected(new Set())
-    else setSelected(new Set(sortedContas.map((c) => c.id)))
+    if (selected.size === contas.length && contas.length > 0) setSelected(new Set())
+    else setSelected(new Set(contas.map((c) => c.id)))
     setLastSelected(null)
   }
 
@@ -692,14 +613,14 @@ export default function PlanoContas() {
 
     toast.success('Contas excluídas com sucesso!')
     setSelected(new Set())
-    fetchContas()
+    refreshGlobalData()
   }
 
   const handleDeleteIndividual = async (id: string) => {
     if (!confirm('Excluir esta conta?')) return
     await supabase.from('plano_contas').delete().eq('id', id)
     toast.success('Conta excluída!')
-    fetchContas()
+    refreshGlobalData()
   }
 
   const handleBatchUpdate = async () => {
@@ -712,7 +633,6 @@ export default function PlanoContas() {
     if (batchConfig.tipo) updates.tipo = batchConfig.tipo
     if (batchConfig.natureza) updates.natureza = batchConfig.natureza
 
-    setLoading(true)
     try {
       const { error } = await supabase
         .from('plano_contas')
@@ -723,10 +643,9 @@ export default function PlanoContas() {
       if (error) throw error
       toast.success('Contas atualizadas em lote com sucesso!')
       setBatchDialogOpen(false)
-      fetchContas()
+      refreshGlobalData()
     } catch (err: any) {
       toast.error('Erro ao atualizar em lote: ' + err.message)
-      setLoading(false)
     }
   }
 
@@ -762,7 +681,7 @@ export default function PlanoContas() {
         toast.success('Conta criada!')
       }
       setSheetOpen(false)
-      fetchContas()
+      refreshGlobalData()
     } catch (err: any) {
       toast.error('Erro ao salvar: ' + err.message)
     }
@@ -821,7 +740,7 @@ export default function PlanoContas() {
             Plano de Contas
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Gerencie a estrutura contábil, naturezas e diretrizes ({contas.length} contas no total).
+            Gerencie a estrutura contábil, naturezas e diretrizes.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -914,18 +833,24 @@ export default function PlanoContas() {
               <Button
                 variant="outline"
                 className="bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                disabled={exporting || totalCount === 0}
               >
-                <Download className="w-4 h-4 mr-2" /> Exportar
+                {exporting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                {exporting ? 'Exportando...' : 'Exportar'}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleExport('CSV')}>
+              <DropdownMenuItem onClick={() => handleExport('CSV')} disabled={exporting}>
                 Exportar como CSV
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('PDF')}>
+              <DropdownMenuItem onClick={() => handleExport('PDF')} disabled={exporting}>
                 Exportar como PDF (Imprimir)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('BROWSER')}>
+              <DropdownMenuItem onClick={() => handleExport('BROWSER')} disabled={exporting}>
                 Visualizar no Navegador
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -937,145 +862,142 @@ export default function PlanoContas() {
         </div>
       </div>
 
-      {/* DASHBOARD NATUREZA */}
-      {contas.length > 0 && !loading && (
-        <div className="grid gap-4 md:grid-cols-4 mb-6 animate-in slide-in-from-top-4 duration-500">
-          <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card
-              className={cn(
-                'bg-blue-50/60 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
-                filterNatureza === 'ATIVO'
-                  ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background'
-                  : 'hover:border-blue-300',
-              )}
-              onClick={() => handleNaturezaClick('ATIVO')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
-                <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
-                  Ativo
-                </CardTitle>
-                <Wallet className="h-4 w-4 text-blue-500" />
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                  {dashboardData.stats.ATIVO}
-                </div>
-              </CardContent>
-            </Card>
-            <Card
-              className={cn(
-                'bg-red-50/60 dark:bg-red-950/20 border-red-100 dark:border-red-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
-                filterNatureza === 'PASSIVO'
-                  ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background'
-                  : 'hover:border-red-300',
-              )}
-              onClick={() => handleNaturezaClick('PASSIVO')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
-                <CardTitle className="text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wider">
-                  Passivo
-                </CardTitle>
-                <Wallet className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold text-red-900 dark:text-red-100">
-                  {dashboardData.stats.PASSIVO}
-                </div>
-              </CardContent>
-            </Card>
-            <Card
-              className={cn(
-                'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
-                filterNatureza === 'RECEITAS'
-                  ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background'
-                  : 'hover:border-emerald-300',
-              )}
-              onClick={() => handleNaturezaClick('RECEITAS')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
-                <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-                  Receitas
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-                  {dashboardData.stats.RECEITAS}
-                </div>
-              </CardContent>
-            </Card>
-            <Card
-              className={cn(
-                'bg-amber-50/60 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
-                filterNatureza === 'DESPESAS'
-                  ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background'
-                  : 'hover:border-amber-300',
-              )}
-              onClick={() => handleNaturezaClick('DESPESAS')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
-                <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
-                  Despesas
-                </CardTitle>
-                <TrendingDown className="h-4 w-4 text-amber-500" />
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
-                  {dashboardData.stats.DESPESAS}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card className="col-span-1 shadow-sm bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="text-xs font-semibold text-slate-500 flex items-center gap-2 uppercase tracking-wider">
-                <PieChartIcon className="w-3.5 h-3.5" /> Distribuição
+      <div className="grid gap-4 md:grid-cols-4 mb-6 animate-in slide-in-from-top-4 duration-500">
+        <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card
+            className={cn(
+              'bg-blue-50/60 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+              filterNatureza === 'ATIVO'
+                ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background'
+                : 'hover:border-blue-300',
+            )}
+            onClick={() => handleNaturezaClick('ATIVO')}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+              <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
+                Ativo
               </CardTitle>
+              <Wallet className="h-4 w-4 text-blue-500" />
             </CardHeader>
-            <CardContent className="p-0 h-[80px] flex justify-center items-center">
-              {dashboardData.chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={dashboardData.chartData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={22}
-                      outerRadius={35}
-                      paddingAngle={2}
-                    >
-                      {dashboardData.chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      contentStyle={{
-                        fontSize: '11px',
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      }}
-                      itemStyle={{ color: '#333' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <span className="text-xs text-slate-400">Sem dados</span>
-              )}
+            <CardContent className="px-4 pb-4">
+              <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                {dashboardStats.ATIVO}
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className={cn(
+              'bg-red-50/60 dark:bg-red-950/20 border-red-100 dark:border-red-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+              filterNatureza === 'PASSIVO'
+                ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background'
+                : 'hover:border-red-300',
+            )}
+            onClick={() => handleNaturezaClick('PASSIVO')}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+              <CardTitle className="text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wider">
+                Passivo
+              </CardTitle>
+              <Wallet className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="text-2xl font-bold text-red-900 dark:text-red-100">
+                {dashboardStats.PASSIVO}
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className={cn(
+              'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+              filterNatureza === 'RECEITAS'
+                ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background'
+                : 'hover:border-emerald-300',
+            )}
+            onClick={() => handleNaturezaClick('RECEITAS')}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+              <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                Receitas
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
+                {dashboardStats.RECEITAS}
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className={cn(
+              'bg-amber-50/60 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+              filterNatureza === 'DESPESAS'
+                ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background'
+                : 'hover:border-amber-300',
+            )}
+            onClick={() => handleNaturezaClick('DESPESAS')}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+              <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                Despesas
+              </CardTitle>
+              <TrendingDown className="h-4 w-4 text-amber-500" />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+                {dashboardStats.DESPESAS}
+              </div>
             </CardContent>
           </Card>
         </div>
-      )}
+        <Card className="col-span-1 shadow-sm bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-xs font-semibold text-slate-500 flex items-center gap-2 uppercase tracking-wider">
+              <PieChartIcon className="w-3.5 h-3.5" /> Distribuição
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-[80px] flex justify-center items-center">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={22}
+                    outerRadius={35}
+                    paddingAngle={2}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    contentStyle={{
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                    }}
+                    itemStyle={{ color: '#333' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <span className="text-xs text-slate-400">Sem dados</span>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="bg-white dark:bg-slate-900 border rounded-xl flex-1 flex flex-col overflow-hidden shadow-sm">
         {/* ADVANCED FILTERS BAR */}
         <div className="p-3 border-b flex flex-wrap gap-3 bg-slate-50/80 dark:bg-slate-900/80 items-end">
           <div className="flex-1 min-w-[220px] space-y-1.5">
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Busca Inteligente (Fuzzy)
+              Pesquisa
             </Label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
@@ -1091,10 +1013,7 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Nível
             </Label>
-            <Select
-              value={filterNivel}
-              onValueChange={(v) => startTransition(() => setFilterNivel(v))}
-            >
+            <Select value={filterNivel} onValueChange={setFilterNivel}>
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1109,10 +1028,7 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Tipo
             </Label>
-            <Select
-              value={filterTipo}
-              onValueChange={(v) => startTransition(() => setFilterTipo(v))}
-            >
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1129,10 +1045,7 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Natureza
             </Label>
-            <Select
-              value={filterNatureza}
-              onValueChange={(v) => startTransition(() => setFilterNatureza(v))}
-            >
+            <Select value={filterNatureza} onValueChange={setFilterNatureza}>
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1159,88 +1072,70 @@ export default function PlanoContas() {
           </div>
         </div>
 
-        <div className="bg-slate-50/30 dark:bg-slate-900/50 border-b px-4 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
-          <span className="flex items-center gap-2">
-            Exibindo {sortedContas.length} contas filtradas.
-            {(search !== deferredSearch ||
-              filterFinalidade !== deferredFilterFinalidade ||
-              isPending) && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-          </span>
-          <span className="hidden sm:inline">
-            Dica: Use{' '}
-            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300">Shift</kbd>{' '}
-            + Click para seleção múltipla.
-          </span>
-        </div>
-
-        <div
-          className="flex-1 overflow-auto bg-slate-50/20 dark:bg-slate-950 relative"
-          ref={containerRef}
-          onScroll={(e) => {
-            const target = e.currentTarget
-            requestAnimationFrame(() => setScrollTop(target.scrollTop))
-          }}
-        >
-          {loading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader className="sticky top-0 bg-slate-100 dark:bg-slate-900 shadow-sm z-10 border-b border-slate-300 dark:border-slate-700">
-                <TableRow className="border-0">
-                  <TableHead className="w-10 text-center px-2 py-2">
-                    <Checkbox
-                      checked={sortedContas.length > 0 && selected.size === sortedContas.length}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  <TableHead
-                    className="w-20 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
-                    onClick={() => handleSort('codigo')}
-                  >
-                    Código <SortIcon columnKey="codigo" />
-                  </TableHead>
-                  <TableHead
-                    className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
-                    onClick={() => handleSort('classificacao')}
-                  >
-                    Classificação <SortIcon columnKey="classificacao" />
-                  </TableHead>
-                  <TableHead
-                    className="px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
-                    onClick={() => handleSort('nome')}
-                  >
-                    Nome <SortIcon columnKey="nome" />
-                  </TableHead>
-                  <TableHead className="w-24 px-2 py-2">Nível</TableHead>
-                  <TableHead
-                    className="w-24 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
-                    onClick={() => handleSort('tipo')}
-                  >
-                    Tipo <SortIcon columnKey="tipo" />
-                  </TableHead>
-                  <TableHead
-                    className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
-                    onClick={() => handleSort('natureza')}
-                  >
-                    Natureza <SortIcon columnKey="natureza" />
-                  </TableHead>
-                  <TableHead className="w-16 px-2 py-2 text-right">Ações</TableHead>
+        <div className="flex-1 overflow-auto bg-slate-50/20 dark:bg-slate-950 relative">
+          <Table>
+            <TableHeader className="sticky top-0 bg-slate-100 dark:bg-slate-900 shadow-sm z-10 border-b border-slate-300 dark:border-slate-700">
+              <TableRow className="border-0">
+                <TableHead className="w-10 text-center px-2 py-2">
+                  <Checkbox
+                    checked={contas.length > 0 && selected.size === contas.length}
+                    onCheckedChange={toggleAll}
+                  />
+                </TableHead>
+                <TableHead
+                  className="w-20 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                  onClick={() => handleSort('codigo')}
+                >
+                  Código <SortIcon columnKey="codigo" />
+                </TableHead>
+                <TableHead
+                  className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                  onClick={() => handleSort('classificacao')}
+                >
+                  Classificação <SortIcon columnKey="classificacao" />
+                </TableHead>
+                <TableHead
+                  className="px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                  onClick={() => handleSort('nome')}
+                >
+                  Nome <SortIcon columnKey="nome" />
+                </TableHead>
+                <TableHead className="w-24 px-2 py-2">Nível</TableHead>
+                <TableHead
+                  className="w-24 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                  onClick={() => handleSort('tipo')}
+                >
+                  Tipo <SortIcon columnKey="tipo" />
+                </TableHead>
+                <TableHead
+                  className="w-28 px-2 py-2 cursor-pointer hover:bg-slate-200/50 select-none"
+                  onClick={() => handleSort('natureza')}
+                >
+                  Natureza <SortIcon columnKey="natureza" />
+                </TableHead>
+                <TableHead className="w-16 px-2 py-2 text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex justify-center items-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topSpacer > 0 && (
-                  <TableRow className="border-0 hover:bg-transparent">
-                    <TableCell colSpan={8} className="p-0 border-0" style={{ height: topSpacer }} />
-                  </TableRow>
-                )}
-                {visibleContas.map((conta) => {
-                  const levels =
-                    conta._levels ||
-                    (conta.classificacao ? conta.classificacao.split('.').length : 0)
+              ) : contas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                    Nenhuma conta encontrada com os filtros atuais.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                contas.map((conta) => {
+                  const levels = conta.classificacao ? conta.classificacao.split('.').length : 0
                   const calculatedLevel =
-                    conta._calculatedLevel || getCalculatedLevel(conta.classificacao)
+                    conta.nivel_tipo || getCalculatedLevel(conta.classificacao)
 
                   let rowBgClass =
                     'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80'
@@ -1271,20 +1166,10 @@ export default function PlanoContas() {
                     }
                   }
 
-                  const isMatch = deferredSearch && conta._isMatch
-
                   return (
                     <TableRow
                       key={conta.id}
-                      style={{ height: rowHeight }}
-                      className={cn(
-                        'transition-colors group',
-                        borderClass,
-                        rowBgClass,
-                        isMatch &&
-                          calculatedLevel !== 'SINTETICA' &&
-                          'ring-1 ring-inset ring-primary/50 bg-primary/5 dark:bg-primary/10',
-                      )}
+                      className={cn('transition-colors group h-10', borderClass, rowBgClass)}
                     >
                       <TableCell className="text-center px-2 py-1.5">
                         <Checkbox
@@ -1382,26 +1267,89 @@ export default function PlanoContas() {
                       </TableCell>
                     </TableRow>
                   )
-                })}
-                {bottomSpacer > 0 && (
-                  <TableRow className="border-0 hover:bg-transparent">
-                    <TableCell
-                      colSpan={8}
-                      className="p-0 border-0"
-                      style={{ height: bottomSpacer }}
-                    />
-                  </TableRow>
-                )}
-                {sortedContas.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      Nenhuma conta encontrada com os filtros atuais.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* PAGINATION BAR */}
+        <div className="bg-slate-50 dark:bg-slate-900 border-t px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-slate-500">
+          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
+            <span className="flex items-center gap-2">
+              <span>
+                Mostrando {totalCount === 0 ? 0 : (page - 1) * pageSize + 1} a{' '}
+                {Math.min(page * pageSize, totalCount)} de {totalCount} registros
+              </span>
+              {(search !== debouncedSearch ||
+                filterFinalidade !== debouncedFinalidade ||
+                loading) && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+            </span>
+            <div className="flex items-center gap-2">
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(v) => {
+                  setPageSize(Number(v))
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="h-8 w-[70px] bg-white dark:bg-slate-950">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="250">250</SelectItem>
+                  <SelectItem value="500">500</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="hidden sm:inline text-xs">por página</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage(1)}
+              disabled={page === 1 || loading}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="flex items-center justify-center px-3 font-medium text-xs">
+              Página {page} de {totalPages}
+            </div>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages || loading}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages || loading}
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
