@@ -113,7 +113,7 @@ export const executePlanoContasImport = async (
   // 3. Process DELETES (if replacing total chart of accounts) via batches
   if (mode === 'REPLACE') {
     const toDeleteIds = Array.from(allExistingIds).filter((id) => !processedIds.has(id))
-    const DELETE_BATCH_SIZE = 100
+    const DELETE_BATCH_SIZE = 40
     for (let i = 0; i < toDeleteIds.length; i += DELETE_BATCH_SIZE) {
       const batch = toDeleteIds.slice(i, i + DELETE_BATCH_SIZE)
       const { error: deleteError } = await supabase.from('plano_contas').delete().in('id', batch)

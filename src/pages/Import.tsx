@@ -113,6 +113,7 @@ export default function ImportPage() {
   const [isProcessingLocal, setIsProcessingLocal] = useState(false)
   const [hasBackup, setHasBackup] = useState(false)
   const [undoDialogOpen, setUndoDialogOpen] = useState(false)
+  const [undoProgress, setUndoProgress] = useState<number | null>(null)
 
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewData, setPreviewData] = useState<any[]>([])
@@ -257,14 +258,28 @@ export default function ImportPage() {
 
     setImportProgress(10)
 
-    const { data: currentData, error: fetchErr } = await supabase
-      .from('plano_contas')
-      .select('*')
-      .eq('user_id', user.id)
+    let currentAccounts: any[] = []
+    let from = 0
+    const step = 1000
+    let fetchMore = true
 
-    if (fetchErr) throw fetchErr
+    while (fetchMore) {
+      const { data, error: fetchErr } = await supabase
+        .from('plano_contas')
+        .select('*')
+        .eq('user_id', user.id)
+        .range(from, from + step - 1)
 
-    const currentAccounts = currentData || []
+      if (fetchErr) throw fetchErr
+
+      if (data && data.length > 0) {
+        currentAccounts = [...currentAccounts, ...data]
+        from += step
+        if (data.length < step) fetchMore = false
+      } else {
+        fetchMore = false
+      }
+    }
 
     setImportProgress(20)
 
@@ -290,7 +305,7 @@ export default function ImportPage() {
 
     let toInsert: any[] = []
 
-    if (action === 'REPLACE_ALL' || action === 'UPDATE_EXISTING') {
+    if (action === 'REPLACE_ALL') {
       toInsert = rawData.map((row) => {
         const existing = currentAccounts.find(
           (c) =>
@@ -303,6 +318,30 @@ export default function ImportPage() {
           user_id: user.id,
         }
       })
+      await supabase.from('plano_contas').delete().eq('user_id', user.id)
+    } else if (action === 'UPDATE_EXISTING') {
+      const untouched = currentAccounts.filter((c) => {
+        return !rawData.some(
+          (row) =>
+            (c.codigo && c.codigo === row.codigo) ||
+            (c.classificacao && c.classificacao === row.classificacao),
+        )
+      })
+
+      const updatedAndNew = rawData.map((row) => {
+        const existing = currentAccounts.find(
+          (c) =>
+            (c.codigo && c.codigo === row.codigo) ||
+            (c.classificacao && c.classificacao === row.classificacao),
+        )
+        const merged = existing ? mergeInheritedFields(row, existing) : row
+        return {
+          ...merged,
+          user_id: user.id,
+        }
+      })
+
+      toInsert = [...untouched, ...updatedAndNew]
       await supabase.from('plano_contas').delete().eq('user_id', user.id)
     } else if (action === 'ADD_NEW') {
       toInsert = rawData
@@ -355,8 +394,9 @@ export default function ImportPage() {
   const handleUndoImport = async () => {
     if (!user) return
     setIsProcessingLocal(true)
-    setUndoDialogOpen(false)
+    setUndoProgress(0)
     try {
+      setUndoProgress(10)
       const { data: backups, error: fetchErr } = await supabase
         .from('plano_contas_backup' as any)
         .select('*')
@@ -368,18 +408,28 @@ export default function ImportPage() {
 
       if (!backups || backups.length === 0) {
         toast.error('Nenhum backup encontrado para desfazer.')
+        setUndoDialogOpen(false)
+        setUndoProgress(null)
         return
       }
 
       const latestBackup = backups[0]
       const oldData = latestBackup.data
 
+      setUndoProgress(20)
+
       await supabase.from('plano_contas').delete().eq('user_id', user.id)
 
-      for (let i = 0; i < oldData.length; i += 500) {
+      setUndoProgress(40)
+
+      const total = oldData.length
+      for (let i = 0; i < total; i += 500) {
         const chunk = oldData.slice(i, i + 500)
         const { error: insErr } = await supabase.from('plano_contas').insert(chunk)
         if (insErr) throw insErr
+
+        const p = 40 + Math.round(((i + chunk.length) / total) * 50)
+        setUndoProgress(p > 90 ? 90 : p)
       }
 
       await supabase
@@ -387,10 +437,18 @@ export default function ImportPage() {
         .delete()
         .eq('id', latestBackup.id)
 
+      setUndoProgress(100)
       toast.success('Importação desfeita com sucesso! Plano de Contas restaurado.')
       await fetchStatus()
+
+      setTimeout(() => {
+        setUndoDialogOpen(false)
+        setUndoProgress(null)
+      }, 500)
     } catch (err: any) {
       toast.error('Erro ao desfazer importação: ' + err.message)
+      setUndoDialogOpen(false)
+      setUndoProgress(null)
     } finally {
       setIsProcessingLocal(false)
     }
@@ -663,15 +721,30 @@ export default function ImportPage() {
               antes da sua importação mais recente. Deseja continuar?
             </DialogDescription>
           </DialogHeader>
+
+          {undoProgress !== null && (
+            <div className="py-4 space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Restaurando backup...</span>
+                <span>{undoProgress}%</span>
+              </div>
+              <Progress value={undoProgress} />
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUndoDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setUndoDialogOpen(false)}
+              disabled={undoProgress !== null}
+            >
               Cancelar
             </Button>
             <Button
               variant="default"
               className="bg-amber-600 hover:bg-amber-700"
               onClick={handleUndoImport}
-              disabled={isProcessingLocal}
+              disabled={isProcessingLocal || undoProgress !== null}
             >
               {isProcessingLocal ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Sim, Restaurar Backup
