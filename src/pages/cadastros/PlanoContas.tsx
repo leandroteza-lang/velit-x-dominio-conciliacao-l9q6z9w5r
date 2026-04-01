@@ -1,4 +1,12 @@
-import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react'
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  useDeferredValue,
+  useTransition,
+} from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -106,6 +114,7 @@ export default function PlanoContas() {
 
   const deferredSearch = useDeferredValue(search)
   const deferredFilterFinalidade = useDeferredValue(filterFinalidade)
+  const [isPending, startTransition] = useTransition()
 
   // Batch Update State
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
@@ -160,6 +169,7 @@ export default function PlanoContas() {
           _normCodigo: normalize(c.codigo),
           _normClassificacao: normalize(c.classificacao),
           _normFinalidade: normalize(c.finalidade),
+          _upperNatureza: (c.natureza || '').toUpperCase(),
         }))
         allData = [...allData, ...normalizedData]
         from += step
@@ -192,13 +202,18 @@ export default function PlanoContas() {
     return standardClassificacao ? standardClassificacao.split('.').map((p) => p.length) : null
   }, [contas])
 
+  const expectedDots = expectedMask ? expectedMask.length - 1 : 0
+
   const getCalculatedLevel = useCallback(
     (classificacao?: string) => {
       if (!expectedMask || !classificacao) return 'SINTETICA'
-      const parts = classificacao.split('.')
-      return parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
+      let dots = 0
+      for (let i = 0; i < classificacao.length; i++) {
+        if (classificacao[i] === '.') dots++
+      }
+      return dots === expectedDots ? 'ANALITICA' : 'SINTETICA'
     },
-    [expectedMask],
+    [expectedMask, expectedDots],
   )
 
   const filteredContas = useMemo(() => {
@@ -208,61 +223,96 @@ export default function PlanoContas() {
       filterNatureza !== 'ALL' ||
       deferredFilterFinalidade !== ''
 
-    let baseContas = contas
     const finalidadeNorm = normalize(deferredFilterFinalidade)
-
-    if (hasStrictFilters) {
-      baseContas = baseContas.filter((c) => {
-        if (filterNivel !== 'ALL' && getCalculatedLevel(c.classificacao) !== filterNivel)
-          return false
-        if (filterTipo !== 'ALL' && c.tipo !== filterTipo) return false
-        if (filterNatureza !== 'ALL' && c.natureza !== filterNatureza) return false
-        if (deferredFilterFinalidade && !fuzzyMatch(finalidadeNorm, c._normFinalidade)) return false
-        return true
-      })
-    }
-
     const searchNorm = normalize(deferredSearch)
-    if (!searchNorm) return baseContas
 
-    const directMatches = new Set<string>()
-    const parentsToAdd = new Set<string>()
+    const baseFilteredIds = new Set<string>()
+    const directMatchIds = new Set<string>()
+    const parentClassificacoes = new Set<string>()
+    const syntheticPrefixes: string[] = []
 
-    baseContas.forEach((c) => {
-      const matchName = fuzzyMatch(searchNorm, c._normNome)
-      const matchCod = fuzzyMatch(searchNorm, c._normCodigo)
-      const matchClass = fuzzyMatch(searchNorm, c._normClassificacao)
-      const matchFinalidade =
-        !matchName && !matchCod && !matchClass ? fuzzyMatch(searchNorm, c._normFinalidade) : false
+    for (let i = 0; i < contas.length; i++) {
+      const c = contas[i]
+      let passStrict = true
 
-      if (matchName || matchCod || matchClass || matchFinalidade) {
-        directMatches.add(c.id)
+      if (hasStrictFilters) {
+        if (filterNivel !== 'ALL' && getCalculatedLevel(c.classificacao) !== filterNivel)
+          passStrict = false
+        else if (filterTipo !== 'ALL' && c.tipo !== filterTipo) passStrict = false
+        else if (filterNatureza !== 'ALL' && c._upperNatureza !== filterNatureza) passStrict = false
+        else if (finalidadeNorm && !fuzzyMatch(finalidadeNorm, c._normFinalidade))
+          passStrict = false
+      }
 
-        if (c.classificacao) {
-          const parts = c.classificacao.split('.')
-          let current = ''
-          for (let i = 0; i < parts.length - 1; i++) {
-            current = current ? `${current}.${parts[i]}` : parts[i]
-            parentsToAdd.add(current)
+      if (passStrict) {
+        baseFilteredIds.add(c.id)
+
+        if (searchNorm) {
+          const matchName = fuzzyMatch(searchNorm, c._normNome)
+          const matchCod = !matchName && fuzzyMatch(searchNorm, c._normCodigo)
+          const matchClass = !matchName && !matchCod && fuzzyMatch(searchNorm, c._normClassificacao)
+          const matchFin =
+            !matchName && !matchCod && !matchClass && fuzzyMatch(searchNorm, c._normFinalidade)
+
+          if (matchName || matchCod || matchClass || matchFin) {
+            directMatchIds.add(c.id)
+            if (c.classificacao) {
+              const parts = c.classificacao.split('.')
+              let current = ''
+              for (let j = 0; j < parts.length - 1; j++) {
+                current = current ? `${current}.${parts[j]}` : parts[j]
+                parentClassificacoes.add(current)
+              }
+              if (getCalculatedLevel(c.classificacao) === 'SINTETICA') {
+                syntheticPrefixes.push(c.classificacao + '.')
+              }
+            }
           }
         }
       }
-    })
+    }
 
-    const syntheticPrefixes = baseContas
-      .filter((c) => directMatches.has(c.id) && getCalculatedLevel(c.classificacao) === 'SINTETICA')
-      .map((c) => c.classificacao + '.')
+    if (!searchNorm) {
+      if (!hasStrictFilters) return contas
+      const result = []
+      for (let i = 0; i < contas.length; i++) {
+        if (baseFilteredIds.has(contas[i].id)) result.push(contas[i])
+      }
+      return result
+    }
 
-    return contas.filter((c) => {
-      if (hasStrictFilters && !baseContas.includes(c) && !parentsToAdd.has(c.classificacao || ''))
-        return false
+    const result = []
+    for (let i = 0; i < contas.length; i++) {
+      const c = contas[i]
+      const inBase = baseFilteredIds.has(c.id)
+      const isParent = !!(c.classificacao && parentClassificacoes.has(c.classificacao))
 
-      if (directMatches.has(c.id)) return true
-      if (c.classificacao && parentsToAdd.has(c.classificacao)) return true
-      if (c.classificacao && syntheticPrefixes.some((prefix) => c.classificacao.startsWith(prefix)))
-        return true
-      return false
-    })
+      if (hasStrictFilters && !inBase && !isParent) {
+        continue
+      }
+
+      if (directMatchIds.has(c.id) || isParent) {
+        result.push(c)
+        continue
+      }
+
+      if (c.classificacao) {
+        let matchedPrefix = false
+        for (let p = 0; p < syntheticPrefixes.length; p++) {
+          if (c.classificacao.startsWith(syntheticPrefixes[p])) {
+            matchedPrefix = true
+            break
+          }
+        }
+        if (matchedPrefix) {
+          if (!hasStrictFilters || inBase) {
+            result.push(c)
+          }
+        }
+      }
+    }
+
+    return result
   }, [
     contas,
     deferredSearch,
@@ -539,11 +589,19 @@ export default function PlanoContas() {
     }
   }
 
+  const handleNaturezaClick = (nat: string) => {
+    startTransition(() => {
+      setFilterNatureza(filterNatureza === nat ? 'ALL' : nat)
+    })
+  }
+
   const handleSort = (key: string) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
+    startTransition(() => {
+      setSortConfig((prev) => ({
+        key,
+        direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+      }))
+    })
   }
 
   const toggleSelect = (id: string, shiftKey: boolean) => {
@@ -844,7 +902,7 @@ export default function PlanoContas() {
                   ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background'
                   : 'hover:border-blue-300',
               )}
-              onClick={() => setFilterNatureza(filterNatureza === 'ATIVO' ? 'ALL' : 'ATIVO')}
+              onClick={() => handleNaturezaClick('ATIVO')}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
@@ -865,7 +923,7 @@ export default function PlanoContas() {
                   ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background'
                   : 'hover:border-red-300',
               )}
-              onClick={() => setFilterNatureza(filterNatureza === 'PASSIVO' ? 'ALL' : 'PASSIVO')}
+              onClick={() => handleNaturezaClick('PASSIVO')}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wider">
@@ -886,7 +944,7 @@ export default function PlanoContas() {
                   ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background'
                   : 'hover:border-emerald-300',
               )}
-              onClick={() => setFilterNatureza(filterNatureza === 'RECEITAS' ? 'ALL' : 'RECEITAS')}
+              onClick={() => handleNaturezaClick('RECEITAS')}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
@@ -907,7 +965,7 @@ export default function PlanoContas() {
                   ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background'
                   : 'hover:border-amber-300',
               )}
-              onClick={() => setFilterNatureza(filterNatureza === 'DESPESAS' ? 'ALL' : 'DESPESAS')}
+              onClick={() => handleNaturezaClick('DESPESAS')}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
@@ -987,7 +1045,10 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Nível
             </Label>
-            <Select value={filterNivel} onValueChange={setFilterNivel}>
+            <Select
+              value={filterNivel}
+              onValueChange={(v) => startTransition(() => setFilterNivel(v))}
+            >
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1002,7 +1063,10 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Tipo
             </Label>
-            <Select value={filterTipo} onValueChange={setFilterTipo}>
+            <Select
+              value={filterTipo}
+              onValueChange={(v) => startTransition(() => setFilterTipo(v))}
+            >
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1019,7 +1083,10 @@ export default function PlanoContas() {
             <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Natureza
             </Label>
-            <Select value={filterNatureza} onValueChange={setFilterNatureza}>
+            <Select
+              value={filterNatureza}
+              onValueChange={(v) => startTransition(() => setFilterNatureza(v))}
+            >
               <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
@@ -1049,9 +1116,9 @@ export default function PlanoContas() {
         <div className="bg-slate-50/30 dark:bg-slate-900/50 border-b px-4 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
           <span className="flex items-center gap-2">
             Exibindo {sortedContas.length} contas filtradas.
-            {(search !== deferredSearch || filterFinalidade !== deferredFilterFinalidade) && (
-              <Loader2 className="w-3 h-3 animate-spin text-primary" />
-            )}
+            {(search !== deferredSearch ||
+              filterFinalidade !== deferredFilterFinalidade ||
+              isPending) && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
           </span>
           <span className="hidden sm:inline">
             Dica: Use{' '}
