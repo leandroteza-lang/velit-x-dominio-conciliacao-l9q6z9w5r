@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -49,10 +49,25 @@ import {
   ArrowDown,
   Layers,
   RotateCcw,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  PieChartIcon,
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+
+// Novas importações para Dashboard e Filtros
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
 
 export default function PlanoContas() {
   const { user } = useAuth()
@@ -62,6 +77,12 @@ export default function PlanoContas() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastSelected, setLastSelected] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+
+  // Advanced Filters State
+  const [filterNivel, setFilterNivel] = useState<string>('ALL')
+  const [filterTipo, setFilterTipo] = useState<string>('ALL')
+  const [filterNatureza, setFilterNatureza] = useState<string>('ALL')
+  const [filterFinalidade, setFilterFinalidade] = useState<string>('')
 
   // Batch Update State
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
@@ -142,26 +163,79 @@ export default function PlanoContas() {
     return standardClassificacao ? standardClassificacao.split('.').map((p) => p.length) : null
   }, [contas])
 
+  const getCalculatedLevel = useCallback(
+    (classificacao?: string) => {
+      if (!expectedMask || !classificacao) return 'SINTETICA'
+      const parts = classificacao.split('.')
+      return parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
+    },
+    [expectedMask],
+  )
+
   const normalize = (str?: string) =>
     (str || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
 
-  const filteredContas = useMemo(() => {
-    const searchNorm = normalize(search)
-    if (!searchNorm) return contas
+  // Função para Busca Fuzzy (permite encontrar com erros de digitação leves e ignorar case/acentos)
+  const fuzzyMatch = (pattern: string, str: string) => {
+    if (!pattern) return true
+    if (!str) return false
+    const p = normalize(pattern)
+    const s = normalize(str)
 
+    // Fallback rápido se contiver exatamente a substring
+    if (s.includes(p)) return true
+
+    // Match sequencial (ex: "bco" encontra "banco")
+    let pIdx = 0
+    for (let sIdx = 0; sIdx < s.length; sIdx++) {
+      if (s[sIdx] === p[pIdx]) {
+        pIdx++
+      }
+      if (pIdx === p.length) return true
+    }
+    return false
+  }
+
+  const filteredContas = useMemo(() => {
+    // 1. Aplicar filtros estritos de atributos primeiro
+    const hasStrictFilters =
+      filterNivel !== 'ALL' ||
+      filterTipo !== 'ALL' ||
+      filterNatureza !== 'ALL' ||
+      filterFinalidade !== ''
+
+    let baseContas = contas
+
+    if (hasStrictFilters) {
+      baseContas = baseContas.filter((c) => {
+        if (filterNivel !== 'ALL' && getCalculatedLevel(c.classificacao) !== filterNivel)
+          return false
+        if (filterTipo !== 'ALL' && c.tipo !== filterTipo) return false
+        if (filterNatureza !== 'ALL' && c.natureza !== filterNatureza) return false
+        if (filterFinalidade && !fuzzyMatch(filterFinalidade, c.finalidade)) return false
+        return true
+      })
+    }
+
+    const searchNorm = normalize(search)
+    if (!searchNorm) return baseContas
+
+    // 2. Busca Global com Fuzzy Search e Manutenção de Pais/Filhos
     const directMatches = new Set<string>()
     const parentsToAdd = new Set<string>()
 
-    contas.forEach((c) => {
-      const matchName = normalize(c.nome).includes(searchNorm)
-      const matchFinalidade = normalize(c.finalidade).includes(searchNorm)
-      const matchCod = normalize(c.codigo).includes(searchNorm)
-      const matchClass = normalize(c.classificacao).includes(searchNorm)
+    baseContas.forEach((c) => {
+      const matchName = fuzzyMatch(search, c.nome)
+      const matchCod = fuzzyMatch(search, c.codigo)
+      const matchClass = fuzzyMatch(search, c.classificacao)
+      // Também busca na finalidade globalmente se não achou nos outros
+      const matchFinalidade =
+        !matchName && !matchCod && !matchClass ? fuzzyMatch(search, c.finalidade) : false
 
-      if (matchName || matchFinalidade || matchCod || matchClass) {
+      if (matchName || matchCod || matchClass || matchFinalidade) {
         directMatches.add(c.id)
 
         if (c.classificacao) {
@@ -175,18 +249,30 @@ export default function PlanoContas() {
       }
     })
 
-    const syntheticPrefixes = contas
-      .filter((c) => directMatches.has(c.id) && c.nivel_tipo === 'SINTETICA')
+    const syntheticPrefixes = baseContas
+      .filter((c) => directMatches.has(c.id) && getCalculatedLevel(c.classificacao) === 'SINTETICA')
       .map((c) => c.classificacao + '.')
 
     return contas.filter((c) => {
+      // Se não passou nos filtros estritos e não é um pai que precisamos incluir, remove
+      if (hasStrictFilters && !baseContas.includes(c) && !parentsToAdd.has(c.classificacao || ''))
+        return false
+
       if (directMatches.has(c.id)) return true
       if (c.classificacao && parentsToAdd.has(c.classificacao)) return true
       if (c.classificacao && syntheticPrefixes.some((prefix) => c.classificacao.startsWith(prefix)))
         return true
       return false
     })
-  }, [contas, search])
+  }, [
+    contas,
+    search,
+    filterNivel,
+    filterTipo,
+    filterNatureza,
+    filterFinalidade,
+    getCalculatedLevel,
+  ])
 
   const sortedContas = useMemo(() => {
     const sortableItems = [...filteredContas]
@@ -199,6 +285,30 @@ export default function PlanoContas() {
     })
     return sortableItems
   }, [filteredContas, sortConfig])
+
+  // Dashboard Data Calculation
+  const dashboardData = useMemo(() => {
+    const stats = { ATIVO: 0, PASSIVO: 0, RECEITAS: 0, DESPESAS: 0, OUTROS: 0 }
+
+    contas.forEach((c) => {
+      const nat = (c.natureza || '').toUpperCase()
+      if (nat === 'ATIVO') stats.ATIVO++
+      else if (nat === 'PASSIVO') stats.PASSIVO++
+      else if (nat === 'RECEITAS') stats.RECEITAS++
+      else if (nat === 'DESPESAS') stats.DESPESAS++
+      else stats.OUTROS++
+    })
+
+    const chartData = [
+      { name: 'Ativo', value: stats.ATIVO, color: '#3b82f6' }, // blue-500
+      { name: 'Passivo', value: stats.PASSIVO, color: '#ef4444' }, // red-500
+      { name: 'Receitas', value: stats.RECEITAS, color: '#10b981' }, // emerald-500
+      { name: 'Despesas', value: stats.DESPESAS, color: '#f59e0b' }, // amber-500
+      { name: 'Outros', value: stats.OUTROS, color: '#94a3b8' }, // slate-400
+    ].filter((d) => d.value > 0)
+
+    return { stats, chartData }
+  }, [contas])
 
   // Virtualization Calculations
   const clientHeight = containerRef.current?.clientHeight || 600
@@ -366,8 +476,6 @@ export default function PlanoContas() {
         return
       }
 
-      // Deletar as contas atuais em lotes de 100 para evitar erro de URL longa (400)
-      // Primeiro busca todos os IDs com paginação
       let allIdsToDelete: string[] = []
       let fromDelete = 0
       const stepDelete = 1000
@@ -394,7 +502,7 @@ export default function PlanoContas() {
       setRestoreProgress(30)
 
       if (allIdsToDelete.length > 0) {
-        const DELETE_BATCH_SIZE = 40 // Limite seguro menor para garantir URL dentro do tamanho
+        const DELETE_BATCH_SIZE = 40
         for (let i = 0; i < allIdsToDelete.length; i += DELETE_BATCH_SIZE) {
           const batch = allIdsToDelete.slice(i, i + DELETE_BATCH_SIZE)
           const { error: deleteError } = await supabase
@@ -402,8 +510,6 @@ export default function PlanoContas() {
             .delete()
             .in('id', batch)
           if (deleteError) throw deleteError
-
-          // Update progress up to 60%
           const progress = 30 + ((i + batch.length) / allIdsToDelete.length) * 30
           setRestoreProgress(progress)
         }
@@ -411,21 +517,15 @@ export default function PlanoContas() {
         setRestoreProgress(60)
       }
 
-      // Inserir os dados de backup também em lotes
       const sanitizedData = backupData.map((c) => {
         const { id, importacao_id, ...rest } = c
-        return {
-          ...rest,
-          user_id: user.id,
-        }
+        return { ...rest, user_id: user.id }
       })
 
       for (let i = 0; i < sanitizedData.length; i += 1000) {
         const batch = sanitizedData.slice(i, i + 1000)
         const { error: insertError } = await supabase.from('plano_contas').insert(batch)
         if (insertError) throw insertError
-
-        // Update progress up to 100%
         const progress = 60 + ((i + batch.length) / sanitizedData.length) * 40
         setRestoreProgress(Math.min(100, progress))
       }
@@ -531,7 +631,6 @@ export default function PlanoContas() {
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    // Mask Validation & Auto Strict Level Calculation
     let strictNivel = formData.nivel_tipo
     if (expectedMask && formData.classificacao) {
       const parts = formData.classificacao.split('.')
@@ -602,12 +701,6 @@ export default function PlanoContas() {
     setSheetOpen(true)
   }
 
-  const getCalculatedLevel = (classificacao: string) => {
-    if (!expectedMask || !classificacao) return 'SINTETICA'
-    const parts = classificacao.split('.')
-    return parts.length === expectedMask.length ? 'ANALITICA' : 'SINTETICA'
-  }
-
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
     if (sortConfig.key !== columnKey)
       return <ArrowUpDown className="ml-1 w-3 h-3 inline-block text-slate-300" />
@@ -619,17 +712,17 @@ export default function PlanoContas() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl flex flex-col animate-in fade-in duration-500 h-[calc(100vh-64px)]">
+    <div className="container mx-auto py-8 px-4 max-w-7xl flex flex-col animate-in fade-in duration-500 min-h-[calc(100vh-64px)]">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Plano de Contas
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Gerencie a estrutura contábil, naturezas e diretrizes ({contas.length} contas).
+            Gerencie a estrutura contábil, naturezas e diretrizes ({contas.length} contas no total).
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selected.size > 0 && (
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 className="w-4 h-4 mr-2" /> Excluir ({selected.size})
@@ -642,15 +735,14 @@ export default function PlanoContas() {
                 variant="secondary"
                 className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
               >
-                <Layers className="w-4 h-4 mr-2" /> Atualização em Lote
+                <Layers className="w-4 h-4 mr-2" /> Atualização Lote
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Atualização em Lote</DialogTitle>
                 <DialogDescription>
-                  Defina regras baseadas no início da classificação para atualizar várias contas
-                  simultaneamente.
+                  Defina regras baseadas no início da classificação para atualizar várias contas.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -712,7 +804,7 @@ export default function PlanoContas() {
             ) : (
               <RotateCcw className="w-4 h-4 mr-2" />
             )}
-            Desfazer Importação
+            Desfazer
           </Button>
 
           <DropdownMenu>
@@ -738,30 +830,203 @@ export default function PlanoContas() {
           </DropdownMenu>
 
           <Button onClick={openNew}>
-            <Plus className="w-4 h-4 mr-2" /> Adicionar Conta
+            <Plus className="w-4 h-4 mr-2" /> Adicionar
           </Button>
         </div>
       </div>
 
+      {/* DASHBOARD NATUREZA */}
+      {contas.length > 0 && !loading && (
+        <div className="grid gap-4 md:grid-cols-4 mb-6 animate-in slide-in-from-top-4 duration-500">
+          <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="bg-blue-50/60 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+                <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
+                  Ativo
+                </CardTitle>
+                <Wallet className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                  {dashboardData.stats.ATIVO}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-red-50/60 dark:bg-red-950/20 border-red-100 dark:border-red-900/50 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+                <CardTitle className="text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wider">
+                  Passivo
+                </CardTitle>
+                <Wallet className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="text-2xl font-bold text-red-900 dark:text-red-100">
+                  {dashboardData.stats.PASSIVO}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+                <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                  Receitas
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
+                  {dashboardData.stats.RECEITAS}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-amber-50/60 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+                <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                  Despesas
+                </CardTitle>
+                <TrendingDown className="h-4 w-4 text-amber-500" />
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+                  {dashboardData.stats.DESPESAS}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="col-span-1 shadow-sm bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-semibold text-slate-500 flex items-center gap-2 uppercase tracking-wider">
+                <PieChartIcon className="w-3.5 h-3.5" /> Distribuição
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 h-[80px] flex justify-center items-center">
+              {dashboardData.chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dashboardData.chartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={22}
+                      outerRadius={35}
+                      paddingAngle={2}
+                    >
+                      {dashboardData.chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      contentStyle={{
+                        fontSize: '11px',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      }}
+                      itemStyle={{ color: '#333' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <span className="text-xs text-slate-400">Sem dados</span>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-slate-900 border rounded-xl flex-1 flex flex-col overflow-hidden shadow-sm">
-        <div className="p-3 border-b flex items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+        {/* ADVANCED FILTERS BAR */}
+        <div className="p-3 border-b flex flex-wrap gap-3 bg-slate-50/80 dark:bg-slate-900/80 items-end">
+          <div className="flex-1 min-w-[220px] space-y-1.5">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Busca Inteligente (Fuzzy)
+            </Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Código, nome, classif..."
+                className="pl-9 h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 focus-visible:ring-primary/30 shadow-inner"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="w-[140px] space-y-1.5">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Nível
+            </Label>
+            <Select value={filterNivel} onValueChange={setFilterNivel}>
+              <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="SINTETICA">Sintética</SelectItem>
+                <SelectItem value="ANALITICA">Analítica</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-[140px] space-y-1.5">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Tipo
+            </Label>
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="DEVEDORA">Devedora</SelectItem>
+                <SelectItem value="CREDORA">Credora</SelectItem>
+                <SelectItem value="AMBAS">Ambas</SelectItem>
+                <SelectItem value="OUTROS">Outros</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-[140px] space-y-1.5">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Natureza
+            </Label>
+            <Select value={filterNatureza} onValueChange={setFilterNatureza}>
+              <SelectTrigger className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="ATIVO">Ativo</SelectItem>
+                <SelectItem value="PASSIVO">Passivo</SelectItem>
+                <SelectItem value="RECEITAS">Receitas</SelectItem>
+                <SelectItem value="DESPESAS">Despesas</SelectItem>
+                <SelectItem value="OUTROS">Outros</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-[180px] space-y-1.5">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Em Finalidade
+            </Label>
             <Input
-              placeholder="Buscar por código, classificação, nome ou finalidade..."
-              className="pl-9 h-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Palavra-chave..."
+              className="h-9 text-sm bg-white dark:bg-slate-950 border-slate-300 shadow-inner"
+              value={filterFinalidade}
+              onChange={(e) => setFilterFinalidade(e.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground hidden sm:block">
-            Dica: Use <kbd className="px-1 bg-slate-100 rounded border">Shift</kbd> + Click para
-            seleção múltipla.
-          </p>
+        </div>
+
+        <div className="bg-slate-50/30 dark:bg-slate-900/50 border-b px-4 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
+          <span>Exibindo {sortedContas.length} contas filtradas.</span>
+          <span className="hidden sm:inline">
+            Dica: Use{' '}
+            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300">Shift</kbd>{' '}
+            + Click para seleção múltipla.
+          </span>
         </div>
 
         <div
-          className="flex-1 overflow-auto bg-slate-50/30 dark:bg-slate-950 relative"
+          className="flex-1 overflow-auto bg-slate-50/20 dark:bg-slate-950 relative"
           ref={containerRef}
           onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
         >
@@ -854,7 +1119,7 @@ export default function PlanoContas() {
 
                   const isMatch =
                     search &&
-                    normalize(conta.nome + ' ' + conta.finalidade).includes(normalize(search))
+                    fuzzyMatch(search, conta.nome + ' ' + conta.finalidade + ' ' + conta.codigo)
 
                   return (
                     <TableRow
@@ -898,7 +1163,7 @@ export default function PlanoContas() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'text-sm px-2 py-1.5 max-w-[200px] md:max-w-[400px]',
+                          'text-sm px-2 py-1.5 max-w-[200px] md:max-w-[300px]',
                           textClass,
                         )}
                       >
@@ -978,7 +1243,7 @@ export default function PlanoContas() {
                 {sortedContas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      Nenhuma conta encontrada.
+                      Nenhuma conta encontrada com os filtros atuais.
                     </TableCell>
                   </TableRow>
                 )}
