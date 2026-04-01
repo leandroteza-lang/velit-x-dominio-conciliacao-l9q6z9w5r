@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -58,7 +58,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
-// Novas importações para Dashboard e Filtros
 import {
   Select,
   SelectContent,
@@ -68,6 +67,27 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
+
+const normalize = (str?: string) =>
+  (str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+const fuzzyMatch = (patternNorm: string, strNorm: string) => {
+  if (!patternNorm) return true
+  if (!strNorm) return false
+  if (strNorm.includes(patternNorm)) return true
+
+  let pIdx = 0
+  for (let sIdx = 0; sIdx < strNorm.length; sIdx++) {
+    if (strNorm[sIdx] === patternNorm[pIdx]) {
+      pIdx++
+    }
+    if (pIdx === patternNorm.length) return true
+  }
+  return false
+}
 
 export default function PlanoContas() {
   const { user } = useAuth()
@@ -83,6 +103,9 @@ export default function PlanoContas() {
   const [filterTipo, setFilterTipo] = useState<string>('ALL')
   const [filterNatureza, setFilterNatureza] = useState<string>('ALL')
   const [filterFinalidade, setFilterFinalidade] = useState<string>('')
+
+  const deferredSearch = useDeferredValue(search)
+  const deferredFilterFinalidade = useDeferredValue(filterFinalidade)
 
   // Batch Update State
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
@@ -131,7 +154,14 @@ export default function PlanoContas() {
         .range(from, from + step - 1)
 
       if (data && data.length > 0) {
-        allData = [...allData, ...data]
+        const normalizedData = data.map((c: any) => ({
+          ...c,
+          _normNome: normalize(c.nome),
+          _normCodigo: normalize(c.codigo),
+          _normClassificacao: normalize(c.classificacao),
+          _normFinalidade: normalize(c.finalidade),
+        }))
+        allData = [...allData, ...normalizedData]
         from += step
         if (data.length < step) fetchMore = false
       } else {
@@ -146,7 +176,6 @@ export default function PlanoContas() {
     fetchContas()
   }, [user])
 
-  // Derive mask pattern from existing accounts to validate new ones
   const expectedMask = useMemo(() => {
     if (contas.length === 0) return null
     let maxParts = 0
@@ -172,42 +201,15 @@ export default function PlanoContas() {
     [expectedMask],
   )
 
-  const normalize = (str?: string) =>
-    (str || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-
-  // Função para Busca Fuzzy (permite encontrar com erros de digitação leves e ignorar case/acentos)
-  const fuzzyMatch = (pattern: string, str: string) => {
-    if (!pattern) return true
-    if (!str) return false
-    const p = normalize(pattern)
-    const s = normalize(str)
-
-    // Fallback rápido se contiver exatamente a substring
-    if (s.includes(p)) return true
-
-    // Match sequencial (ex: "bco" encontra "banco")
-    let pIdx = 0
-    for (let sIdx = 0; sIdx < s.length; sIdx++) {
-      if (s[sIdx] === p[pIdx]) {
-        pIdx++
-      }
-      if (pIdx === p.length) return true
-    }
-    return false
-  }
-
   const filteredContas = useMemo(() => {
-    // 1. Aplicar filtros estritos de atributos primeiro
     const hasStrictFilters =
       filterNivel !== 'ALL' ||
       filterTipo !== 'ALL' ||
       filterNatureza !== 'ALL' ||
-      filterFinalidade !== ''
+      deferredFilterFinalidade !== ''
 
     let baseContas = contas
+    const finalidadeNorm = normalize(deferredFilterFinalidade)
 
     if (hasStrictFilters) {
       baseContas = baseContas.filter((c) => {
@@ -215,25 +217,23 @@ export default function PlanoContas() {
           return false
         if (filterTipo !== 'ALL' && c.tipo !== filterTipo) return false
         if (filterNatureza !== 'ALL' && c.natureza !== filterNatureza) return false
-        if (filterFinalidade && !fuzzyMatch(filterFinalidade, c.finalidade)) return false
+        if (deferredFilterFinalidade && !fuzzyMatch(finalidadeNorm, c._normFinalidade)) return false
         return true
       })
     }
 
-    const searchNorm = normalize(search)
+    const searchNorm = normalize(deferredSearch)
     if (!searchNorm) return baseContas
 
-    // 2. Busca Global com Fuzzy Search e Manutenção de Pais/Filhos
     const directMatches = new Set<string>()
     const parentsToAdd = new Set<string>()
 
     baseContas.forEach((c) => {
-      const matchName = fuzzyMatch(search, c.nome)
-      const matchCod = fuzzyMatch(search, c.codigo)
-      const matchClass = fuzzyMatch(search, c.classificacao)
-      // Também busca na finalidade globalmente se não achou nos outros
+      const matchName = fuzzyMatch(searchNorm, c._normNome)
+      const matchCod = fuzzyMatch(searchNorm, c._normCodigo)
+      const matchClass = fuzzyMatch(searchNorm, c._normClassificacao)
       const matchFinalidade =
-        !matchName && !matchCod && !matchClass ? fuzzyMatch(search, c.finalidade) : false
+        !matchName && !matchCod && !matchClass ? fuzzyMatch(searchNorm, c._normFinalidade) : false
 
       if (matchName || matchCod || matchClass || matchFinalidade) {
         directMatches.add(c.id)
@@ -254,7 +254,6 @@ export default function PlanoContas() {
       .map((c) => c.classificacao + '.')
 
     return contas.filter((c) => {
-      // Se não passou nos filtros estritos e não é um pai que precisamos incluir, remove
       if (hasStrictFilters && !baseContas.includes(c) && !parentsToAdd.has(c.classificacao || ''))
         return false
 
@@ -266,11 +265,11 @@ export default function PlanoContas() {
     })
   }, [
     contas,
-    search,
+    deferredSearch,
     filterNivel,
     filterTipo,
     filterNatureza,
-    filterFinalidade,
+    deferredFilterFinalidade,
     getCalculatedLevel,
   ])
 
@@ -286,7 +285,6 @@ export default function PlanoContas() {
     return sortableItems
   }, [filteredContas, sortConfig])
 
-  // Dashboard Data Calculation
   const dashboardData = useMemo(() => {
     const stats = { ATIVO: 0, PASSIVO: 0, RECEITAS: 0, DESPESAS: 0, OUTROS: 0 }
 
@@ -300,17 +298,16 @@ export default function PlanoContas() {
     })
 
     const chartData = [
-      { name: 'Ativo', value: stats.ATIVO, color: '#3b82f6' }, // blue-500
-      { name: 'Passivo', value: stats.PASSIVO, color: '#ef4444' }, // red-500
-      { name: 'Receitas', value: stats.RECEITAS, color: '#10b981' }, // emerald-500
-      { name: 'Despesas', value: stats.DESPESAS, color: '#f59e0b' }, // amber-500
-      { name: 'Outros', value: stats.OUTROS, color: '#94a3b8' }, // slate-400
+      { name: 'Ativo', value: stats.ATIVO, color: '#3b82f6' },
+      { name: 'Passivo', value: stats.PASSIVO, color: '#ef4444' },
+      { name: 'Receitas', value: stats.RECEITAS, color: '#10b981' },
+      { name: 'Despesas', value: stats.DESPESAS, color: '#f59e0b' },
+      { name: 'Outros', value: stats.OUTROS, color: '#94a3b8' },
     ].filter((d) => d.value > 0)
 
     return { stats, chartData }
   }, [contas])
 
-  // Virtualization Calculations
   const clientHeight = containerRef.current?.clientHeight || 600
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
   const endIndex = Math.min(
@@ -320,6 +317,7 @@ export default function PlanoContas() {
   const visibleContas = sortedContas.slice(startIndex, endIndex)
   const topSpacer = startIndex * rowHeight
   const bottomSpacer = Math.max(0, (sortedContas.length - endIndex) * rowHeight)
+  const deferredSearchNorm = normalize(deferredSearch)
 
   const logExport = (format: string) => {
     if (user) {
@@ -839,7 +837,15 @@ export default function PlanoContas() {
       {contas.length > 0 && !loading && (
         <div className="grid gap-4 md:grid-cols-4 mb-6 animate-in slide-in-from-top-4 duration-500">
           <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-blue-50/60 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50 shadow-sm">
+            <Card
+              className={cn(
+                'bg-blue-50/60 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+                filterNatureza === 'ATIVO'
+                  ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background'
+                  : 'hover:border-blue-300',
+              )}
+              onClick={() => setFilterNatureza(filterNatureza === 'ATIVO' ? 'ALL' : 'ATIVO')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
                   Ativo
@@ -852,7 +858,15 @@ export default function PlanoContas() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-red-50/60 dark:bg-red-950/20 border-red-100 dark:border-red-900/50 shadow-sm">
+            <Card
+              className={cn(
+                'bg-red-50/60 dark:bg-red-950/20 border-red-100 dark:border-red-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+                filterNatureza === 'PASSIVO'
+                  ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background'
+                  : 'hover:border-red-300',
+              )}
+              onClick={() => setFilterNatureza(filterNatureza === 'PASSIVO' ? 'ALL' : 'PASSIVO')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wider">
                   Passivo
@@ -865,7 +879,15 @@ export default function PlanoContas() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 shadow-sm">
+            <Card
+              className={cn(
+                'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+                filterNatureza === 'RECEITAS'
+                  ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background'
+                  : 'hover:border-emerald-300',
+              )}
+              onClick={() => setFilterNatureza(filterNatureza === 'RECEITAS' ? 'ALL' : 'RECEITAS')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
                   Receitas
@@ -878,7 +900,15 @@ export default function PlanoContas() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-amber-50/60 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 shadow-sm">
+            <Card
+              className={cn(
+                'bg-amber-50/60 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 shadow-sm cursor-pointer transition-all hover:shadow-md',
+                filterNatureza === 'DESPESAS'
+                  ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background'
+                  : 'hover:border-amber-300',
+              )}
+              onClick={() => setFilterNatureza(filterNatureza === 'DESPESAS' ? 'ALL' : 'DESPESAS')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
                 <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
                   Despesas
@@ -1017,7 +1047,12 @@ export default function PlanoContas() {
         </div>
 
         <div className="bg-slate-50/30 dark:bg-slate-900/50 border-b px-4 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
-          <span>Exibindo {sortedContas.length} contas filtradas.</span>
+          <span className="flex items-center gap-2">
+            Exibindo {sortedContas.length} contas filtradas.
+            {(search !== deferredSearch || filterFinalidade !== deferredFilterFinalidade) && (
+              <Loader2 className="w-3 h-3 animate-spin text-primary" />
+            )}
+          </span>
           <span className="hidden sm:inline">
             Dica: Use{' '}
             <kbd className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300">Shift</kbd>{' '}
@@ -1118,8 +1153,15 @@ export default function PlanoContas() {
                   }
 
                   const isMatch =
-                    search &&
-                    fuzzyMatch(search, conta.nome + ' ' + conta.finalidade + ' ' + conta.codigo)
+                    deferredSearch &&
+                    fuzzyMatch(
+                      deferredSearchNorm,
+                      (conta._normNome || '') +
+                        ' ' +
+                        (conta._normFinalidade || '') +
+                        ' ' +
+                        (conta._normCodigo || ''),
+                    )
 
                   return (
                     <TableRow
