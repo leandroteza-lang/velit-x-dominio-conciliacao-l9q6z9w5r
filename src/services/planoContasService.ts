@@ -135,5 +135,11 @@ export const executePlanoContasImport = async (
     if (error) throw error
   }
 
-  return { inserted: toInsert.length, updated: toUpdate.length }
+  const total = toInsert.length + toUpdate.length
+  return {
+    inserted: toInsert.length,
+    updated: toUpdate.length,
+    total,
+    message: `Importação concluída: ${total} registros processados (${toInsert.length} novos e ${toUpdate.length} atualizados).`,
+  }
 }
