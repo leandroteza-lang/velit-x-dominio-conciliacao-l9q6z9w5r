@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
+import { Progress } from '@/components/ui/progress'
 import {
   Loader2,
   Plus,
@@ -67,6 +68,7 @@ export default function PlanoContas() {
   const [batchConfig, setBatchConfig] = useState({ prefix: '', tipo: '', natureza: '' })
 
   const [restoring, setRestoring] = useState(false)
+  const [restoreProgress, setRestoreProgress] = useState(0)
 
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'classificacao',
@@ -338,6 +340,7 @@ export default function PlanoContas() {
       return
 
     setRestoring(true)
+    setRestoreProgress(5)
     try {
       const { data: backups, error: backupError } = await supabase
         .from('plano_contas_backup')
@@ -353,6 +356,7 @@ export default function PlanoContas() {
         return
       }
 
+      setRestoreProgress(15)
       const lastBackup = backups[0]
       const backupData = lastBackup.data as any[]
 
@@ -387,6 +391,8 @@ export default function PlanoContas() {
         }
       }
 
+      setRestoreProgress(30)
+
       if (allIdsToDelete.length > 0) {
         const DELETE_BATCH_SIZE = 40 // Limite seguro menor para garantir URL dentro do tamanho
         for (let i = 0; i < allIdsToDelete.length; i += DELETE_BATCH_SIZE) {
@@ -396,7 +402,13 @@ export default function PlanoContas() {
             .delete()
             .in('id', batch)
           if (deleteError) throw deleteError
+
+          // Update progress up to 60%
+          const progress = 30 + ((i + batch.length) / allIdsToDelete.length) * 30
+          setRestoreProgress(progress)
         }
+      } else {
+        setRestoreProgress(60)
       }
 
       // Inserir os dados de backup também em lotes
@@ -412,15 +424,20 @@ export default function PlanoContas() {
         const batch = sanitizedData.slice(i, i + 1000)
         const { error: insertError } = await supabase.from('plano_contas').insert(batch)
         if (insertError) throw insertError
+
+        // Update progress up to 100%
+        const progress = 60 + ((i + batch.length) / sanitizedData.length) * 40
+        setRestoreProgress(Math.min(100, progress))
       }
 
+      setRestoreProgress(100)
       toast.success('Plano de contas restaurado com sucesso!')
       fetchContas()
     } catch (err: any) {
       console.error(err)
       toast.error('Erro ao restaurar: ' + err.message)
     } finally {
-      setRestoring(false)
+      setTimeout(() => setRestoring(false), 500)
     }
   }
 
@@ -1101,6 +1118,28 @@ export default function PlanoContas() {
           </form>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={restoring}>
+        <DialogContent
+          className="sm:max-w-md [&>button]:hidden"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Desfazendo Importação</DialogTitle>
+            <DialogDescription>
+              Restaurando o plano de contas para a versão anterior. Por favor, não feche esta janela
+              ou recarregue a página.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <Progress value={restoreProgress} className="h-2" />
+            <p className="text-sm text-center text-muted-foreground font-medium">
+              {Math.round(restoreProgress)}% concluído
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

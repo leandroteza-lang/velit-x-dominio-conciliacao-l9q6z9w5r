@@ -40,44 +40,68 @@ export const executePlanoContasImport = async (
     if (backupError) throw backupError
   }
 
-  // Helper for advanced comparison logic: ignores casing, spaces and accents
-  const sanitize = (str: string | null) => {
+  // Helpers for advanced comparison logic
+  const sanitizeClassificacao = (str: string | null) => {
     if (!str) return ''
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase()
+    return str.replace(/\s+/g, '').replace(/\./g, '').trim().toLowerCase()
   }
 
-  const existingMapByClassificacao = new Map(
-    existingContas.map((c) => [sanitize(c.classificacao), c]),
-  )
+  const sanitizeCodigo = (str: string | null) => {
+    if (!str) return ''
+    return str.trim().toLowerCase()
+  }
+
+  const existingMapByClassificacao = new Map<string, any>()
+  const existingMapByCodigo = new Map<string, any>()
+  const allExistingIds = new Set<string>()
+
+  existingContas.forEach((c) => {
+    allExistingIds.add(c.id)
+    if (c.classificacao) {
+      existingMapByClassificacao.set(sanitizeClassificacao(c.classificacao), c)
+    }
+    if (c.codigo) {
+      existingMapByCodigo.set(sanitizeCodigo(c.codigo), c)
+    }
+  })
 
   const toInsert: any[] = []
   const toUpdate: any[] = []
+  const processedIds = new Set<string>()
+
+  const getPreserved = (oldVal: any, newVal: any) => {
+    if (oldVal && typeof oldVal === 'string' && oldVal.trim() !== '' && oldVal !== '-') {
+      return oldVal
+    }
+    return newVal
+  }
 
   for (const item of contasToImport) {
-    const classifNorm = sanitize(item.classificacao)
-    const existing = existingMapByClassificacao.get(classifNorm)
+    let existing = null
+
+    if (item.classificacao) {
+      existing = existingMapByClassificacao.get(sanitizeClassificacao(item.classificacao))
+    }
+    if (!existing && item.codigo) {
+      existing = existingMapByCodigo.get(sanitizeCodigo(item.codigo))
+    }
 
     if (existing) {
-      // Preserve custom classifications that were made manually inside the platform
+      processedIds.add(existing.id)
       toUpdate.push({
         id: existing.id,
         codigo: item.codigo || existing.codigo,
         classificacao: item.classificacao || existing.classificacao,
         nome: item.nome || existing.nome,
+        descricao: existing.descricao || item.descricao,
         mascara: item.mascara || existing.mascara,
-        natureza: existing.natureza || item.natureza,
-        tipo: existing.tipo || item.tipo,
-        finalidade: existing.finalidade || item.finalidade,
+        natureza: getPreserved(existing.natureza, item.natureza),
+        tipo: getPreserved(existing.tipo, item.tipo),
+        finalidade: getPreserved(existing.finalidade, item.finalidade),
         nivel_tipo: item.nivel_tipo || existing.nivel_tipo,
+        importacao_id: item.importacao_id || existing.importacao_id,
         user_id: userId,
       })
-      // Mark existing as processed
-      existingMapByClassificacao.delete(classifNorm)
     } else {
       toInsert.push({
         ...item,
@@ -88,7 +112,7 @@ export const executePlanoContasImport = async (
 
   // 3. Process DELETES (if replacing total chart of accounts) via batches
   if (mode === 'REPLACE') {
-    const toDeleteIds = Array.from(existingMapByClassificacao.values()).map((c) => c.id)
+    const toDeleteIds = Array.from(allExistingIds).filter((id) => !processedIds.has(id))
     const DELETE_BATCH_SIZE = 100
     for (let i = 0; i < toDeleteIds.length; i += DELETE_BATCH_SIZE) {
       const batch = toDeleteIds.slice(i, i + DELETE_BATCH_SIZE)
