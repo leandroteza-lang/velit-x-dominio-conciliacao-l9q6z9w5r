@@ -223,8 +223,56 @@ export default function ImportPage() {
     setIsProcessingLocal(true)
     try {
       if (step === 1) {
+        if (!user) throw new Error('Usuário não autenticado')
         const result = await preparePlanoContasImport(file)
-        setPcImportDialog({ open: true, data: result, isProcessing: false })
+
+        let allExistingAccounts: any[] = []
+        let from = 0
+        const pageSize = 1000
+        let fetchMore = true
+
+        while (fetchMore) {
+          const { data, error } = await supabase
+            .from('plano_contas')
+            .select('codigo, classificacao')
+            .eq('user_id', user.id)
+            .range(from, from + pageSize - 1)
+
+          if (error) throw error
+
+          if (data && data.length > 0) {
+            allExistingAccounts = [...allExistingAccounts, ...data]
+            from += pageSize
+            if (data.length < pageSize) fetchMore = false
+          } else {
+            fetchMore = false
+          }
+        }
+
+        const rawData = result.rawData || []
+        const existingAccounts = rawData.filter((row: any) =>
+          allExistingAccounts.some(
+            (c) =>
+              (c.codigo && c.codigo === row.codigo) ||
+              (c.classificacao && c.classificacao === row.classificacao),
+          ),
+        )
+        const newAccounts = rawData.filter(
+          (row: any) =>
+            !allExistingAccounts.some(
+              (c) =>
+                (c.codigo && c.codigo === row.codigo) ||
+                (c.classificacao && c.classificacao === row.classificacao),
+            ),
+        )
+
+        const correctedResult = {
+          ...result,
+          newAccounts,
+          existingAccounts,
+        }
+
+        setPcImportDialog({ open: true, data: correctedResult, isProcessing: false })
       } else {
         if (importacao && counts[step] > 0) {
           const card = CARDS.find((c) => c.step === step)
@@ -788,7 +836,13 @@ export default function ImportPage() {
           <DialogHeader>
             <DialogTitle>Importação do Plano de Contas</DialogTitle>
             <DialogDescription>
-              Analisamos o seu arquivo. Encontramos{' '}
+              Analisamos o seu arquivo. Total de{' '}
+              <strong>
+                {(pcImportDialog.data?.newAccounts?.length || 0) +
+                  (pcImportDialog.data?.existingAccounts?.length || 0)}{' '}
+                registros
+              </strong>{' '}
+              encontrados, sendo{' '}
               <strong>{pcImportDialog.data?.newAccounts?.length || 0} contas novas</strong> e{' '}
               <strong>
                 {pcImportDialog.data?.existingAccounts?.length || 0} contas que já existem
