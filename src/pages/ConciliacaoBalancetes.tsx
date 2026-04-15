@@ -36,6 +36,27 @@ type ConciliacaoRow = {
   status: string
 }
 
+const fetchAllPlanoContas = async () => {
+  let allData: any[] = []
+  let from = 0
+  const step = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('plano_contas')
+      .select('codigo, classificacao, nome, id')
+      .range(from, from + step - 1)
+
+    if (error) {
+      console.error('Error fetching plano_contas:', error)
+      break
+    }
+    if (data) allData = [...allData, ...data]
+    if (!data || data.length < step) break
+    from += step
+  }
+  return allData
+}
+
 export default function ConciliacaoBalancetes() {
   const [data, setData] = useState<ConciliacaoRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,22 +83,26 @@ export default function ConciliacaoBalancetes() {
 
         const importId = imports[0].id
 
-        const [{ data: dominios }, { data: velits }, { data: planoContas }] = await Promise.all([
+        const [dominiosRes, velitsRes, planoContas] = await Promise.all([
           supabase.from('balancete_dominio').select('*').eq('importacao_id', importId),
           supabase.from('balancete_velit').select('*').eq('importacao_id', importId),
-          supabase.from('plano_contas').select('*'),
+          fetchAllPlanoContas(),
         ])
 
-        const dominiosMap = new Map(dominios?.map((d: any) => [d.codigo, d]) || [])
-        const velitsMap = new Map(velits?.map((v: any) => [v.conta_contabil, v]) || [])
-        const planoMap = new Map(planoContas?.map((p: any) => [p.codigo, p]) || [])
+        const dominiosMap = new Map(
+          dominiosRes.data?.map((d: any) => [String(d.codigo || '').trim(), d]) || [],
+        )
+        const velitsMap = new Map(
+          velitsRes.data?.map((v: any) => [String(v.conta_contabil || '').trim(), v]) || [],
+        )
+        const planoMap = new Map(planoContas.map((p: any) => [String(p.codigo || '').trim(), p]))
 
         const allCodes = new Set<string>()
-        dominios?.forEach((d: any) => {
-          if (d.codigo) allCodes.add(d.codigo)
+        dominiosRes.data?.forEach((d: any) => {
+          if (d.codigo) allCodes.add(String(d.codigo).trim())
         })
-        velits?.forEach((v: any) => {
-          if (v.conta_contabil) allCodes.add(v.conta_contabil)
+        velitsRes.data?.forEach((v: any) => {
+          if (v.conta_contabil) allCodes.add(String(v.conta_contabil).trim())
         })
 
         const mergedData: ConciliacaoRow[] = Array.from(allCodes).map((codigo) => {
@@ -159,33 +184,43 @@ export default function ConciliacaoBalancetes() {
   const getStatusBadge = (status: string) => {
     if (status === 'OK') {
       return (
-        <Badge className="bg-teal-500 hover:bg-teal-600 text-white font-medium shadow-sm">OK</Badge>
+        <Badge className="bg-teal-500 hover:bg-teal-600 text-white font-medium shadow-sm border-0">
+          OK
+        </Badge>
       )
     }
     if (status === 'Divergência') {
       return (
-        <Badge className="bg-red-500 hover:bg-red-600 text-white font-medium shadow-sm">
+        <Badge className="bg-red-500 hover:bg-red-600 text-white font-medium shadow-sm border-0">
           Divergência
         </Badge>
       )
     }
     return (
-      <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm text-yellow-950">
+      <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm text-yellow-950 border-0">
         Sem Conta
       </Badge>
     )
   }
 
   const getRowStyle = (classificacao: string) => {
-    if (!classificacao || classificacao === '-') return ''
+    if (!classificacao || classificacao === '-')
+      return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300'
     const level = classificacao.split('.').length
     if (level === 1)
-      return 'bg-slate-200/80 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-800 font-bold'
+      return 'bg-indigo-700 text-white hover:bg-indigo-800 border-b-indigo-800 dark:bg-indigo-900 dark:hover:bg-indigo-800/80 font-bold'
     if (level === 2)
-      return 'bg-slate-100 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800/60 font-semibold'
+      return 'bg-indigo-600 text-white hover:bg-indigo-700 border-b-indigo-700 dark:bg-indigo-800 dark:hover:bg-indigo-700/80 font-bold'
     if (level === 3)
-      return 'bg-slate-50/50 hover:bg-slate-50 dark:bg-slate-900/40 dark:hover:bg-slate-900/40 font-medium'
-    return ''
+      return 'bg-blue-500 text-white hover:bg-blue-600 border-b-blue-600 dark:bg-blue-700 dark:hover:bg-blue-600/80 font-semibold'
+    if (level === 4)
+      return 'bg-blue-200 text-blue-950 hover:bg-blue-300 border-b-blue-300 dark:bg-blue-900/60 dark:text-blue-100 dark:border-b-blue-800 dark:hover:bg-blue-800/50 font-medium'
+    return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
+  }
+
+  const isDarkRow = (classificacao: string) => {
+    if (!classificacao || classificacao === '-') return false
+    return classificacao.split('.').length <= 3
   }
 
   if (loading) {
@@ -263,10 +298,10 @@ export default function ConciliacaoBalancetes() {
                   <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[120px]">
                     Crédito (Domínio)
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px] bg-slate-100/50 dark:bg-slate-800/30">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px]">
                     Saldo Atual (Domínio)
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px] bg-slate-100/50 dark:bg-slate-800/30">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px]">
                     Saldo Atual (VELIT)
                   </TableHead>
                   <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[120px]">
@@ -282,35 +317,39 @@ export default function ConciliacaoBalancetes() {
                   paginatedData.map((row) => (
                     <TableRow
                       key={row.id}
-                      className={cn(
-                        'transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/50',
-                        getRowStyle(row.classificacao),
-                      )}
+                      className={cn('transition-colors', getRowStyle(row.classificacao))}
                     >
                       <TableCell className="font-medium">{row.codigo}</TableCell>
-                      <TableCell className="opacity-80">{row.classificacao}</TableCell>
+                      <TableCell className="opacity-90">{row.classificacao}</TableCell>
                       <TableCell>
                         <span className="block truncate max-w-[220px]" title={row.nome}>
                           {row.nome}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-80">
+                      <TableCell className="text-right whitespace-nowrap opacity-90">
                         {formatCurrency(row.saldo_anterior_dominio)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-80">
+                      <TableCell className="text-right whitespace-nowrap opacity-90">
                         {formatCurrency(row.debito_dominio)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-80">
+                      <TableCell className="text-right whitespace-nowrap opacity-90">
                         {formatCurrency(row.credito_dominio)}
                       </TableCell>
-                      <TableCell className="text-right font-medium whitespace-nowrap bg-slate-50/30 dark:bg-slate-900/20">
+                      <TableCell className="text-right font-medium whitespace-nowrap">
                         {formatCurrency(row.saldo_atual_dominio)}
                       </TableCell>
-                      <TableCell className="text-right font-medium whitespace-nowrap bg-slate-50/30 dark:bg-slate-900/20">
+                      <TableCell className="text-right font-medium whitespace-nowrap">
                         {formatCurrency(row.saldo_atual_velit)}
                       </TableCell>
                       <TableCell
-                        className={`text-right font-bold whitespace-nowrap ${row.diferenca !== 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}
+                        className={cn(
+                          'text-right font-bold whitespace-nowrap',
+                          row.diferenca !== 0
+                            ? isDarkRow(row.classificacao)
+                              ? 'text-red-300'
+                              : 'text-red-600 dark:text-red-400'
+                            : '',
+                        )}
                       >
                         {formatCurrency(row.diferenca)}
                       </TableCell>
