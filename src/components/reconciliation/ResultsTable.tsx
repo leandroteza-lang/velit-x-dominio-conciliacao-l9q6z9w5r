@@ -90,8 +90,8 @@ export function ResultsTable({ data }: ResultsTableProps) {
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader className="bg-slate-50 dark:bg-slate-950/50">
+        <Table wrapperClassName="max-h-[calc(100vh-250px)]">
+          <TableHeader className="sticky top-0 z-30 bg-slate-50 dark:bg-slate-950 shadow-sm ring-1 ring-black/5 dark:ring-white/5">
             <TableRow>
               <TableHead className="w-[120px]">Data</TableHead>
               <TableHead>Descrição</TableHead>
