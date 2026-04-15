@@ -1,7 +1,13 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import * as XLSX from 'npm:xlsx@0.18.5'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+}
 
 function parseExcelDate(v: any): string | null {
   if (!v) return null
