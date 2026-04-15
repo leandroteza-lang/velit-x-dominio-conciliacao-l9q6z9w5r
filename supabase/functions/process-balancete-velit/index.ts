@@ -179,19 +179,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const planoContasMap = new Map<string, string>()
-    const planoContasMapByMascara = new Map<string, string>()
+    const planoContasMapByMascaraToCodigo = new Map<string, string>()
+    const planoContasMapByClassificacaoToCodigo = new Map<string, string>()
     let fallbackMascara = ''
+
     for (const pc of planoContasData) {
-      if (pc.classificacao) {
-        planoContasMapByMascara.set(normalizarMascara(pc.classificacao), pc.classificacao)
+      if (pc.codigo) {
+        const cod = String(pc.codigo).trim()
+        if (pc.mascara) planoContasMapByMascaraToCodigo.set(normalizarMascara(pc.mascara), cod)
+        if (pc.classificacao) planoContasMapByClassificacaoToCodigo.set(pc.classificacao, cod)
       }
-      if (pc.codigo && pc.classificacao) {
-        planoContasMap.set(String(pc.codigo).trim(), pc.classificacao)
-      }
-      if (pc.mascara && !fallbackMascara) {
-        fallbackMascara = pc.mascara
-      }
+      if (pc.mascara && !fallbackMascara) fallbackMascara = pc.mascara
     }
 
     const arrayBuffer = await file.arrayBuffer()
@@ -208,7 +206,8 @@ Deno.serve(async (req: Request) => {
     // Identify columns dynamically
     let headerRowIdx = -1
     let colMap = {
-      conta_contabil: -1,
+      conta_contabil: -1, // Will map to "Código Reduzido"
+      classificacao: -1, // Will map to "Conta Contábil / Classificação"
       descricao: -1,
       saldo_anterior: -1,
       debito: -1,
@@ -230,16 +229,24 @@ Deno.serve(async (req: Request) => {
         const val = rowStrings[j]
         if (!val) continue
         if (
-          val === 'conta' ||
+          val === 'reduzido' ||
+          val === 'cód. reduzido' ||
+          val === 'cod. reduzido' ||
           val === 'código' ||
           val === 'codigo' ||
           val === 'cod' ||
           val === 'cód' ||
-          val.includes('contábil') ||
-          val.includes('contabil')
-        )
+          val === 'código reduzido'
+        ) {
           colMap.conta_contabil = j
-        else if (val.includes('descri') || val.includes('nome')) colMap.descricao = j
+        } else if (
+          val === 'conta' ||
+          val.includes('contábil') ||
+          val.includes('contabil') ||
+          val.includes('classifica')
+        ) {
+          colMap.classificacao = j
+        } else if (val.includes('descri') || val.includes('nome')) colMap.descricao = j
         else if (val.includes('anterior') && !val.includes('atual')) colMap.saldo_anterior = j
         else if (
           (val === 'débito' || val === 'debito' || val === 'débitos' || val === 'debitos') &&
@@ -257,7 +264,7 @@ Deno.serve(async (req: Request) => {
       if (
         colMap.saldo_anterior !== -1 &&
         colMap.saldo_atual !== -1 &&
-        colMap.conta_contabil !== -1
+        (colMap.conta_contabil !== -1 || colMap.classificacao !== -1)
       ) {
         headerRowIdx = i
         break
@@ -265,9 +272,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (headerRowIdx === -1) {
-      // Fallback for VELIT Layout as described in VBA
+      // Fallback for VELIT Layout as described by user: Classificacao, Codigo Reduzido, Descricao, Saldo Ant, Deb, Cred, Saldo Atual
       colMap = {
-        conta_contabil: 0,
+        classificacao: 0,
+        conta_contabil: 1,
         descricao: 2,
         saldo_anterior: 3,
         debito: 4,
@@ -380,29 +388,30 @@ Deno.serve(async (req: Request) => {
       const row = jsonData[r]
       if (!row || row.length === 0) continue
 
-      const contaRaw =
+      let codigo =
         colMap.conta_contabil !== -1 && row[colMap.conta_contabil] != null
           ? String(row[colMap.conta_contabil]).trim()
+          : null
+      let classificacao =
+        colMap.classificacao !== -1 && row[colMap.classificacao] != null
+          ? String(row[colMap.classificacao]).trim()
           : null
       let descricao =
         colMap.descricao !== -1 && row[colMap.descricao] != null
           ? String(row[colMap.descricao]).trim()
           : null
 
-      let conta_contabil = contaRaw ? normalizarMascara(contaRaw) : null
-
-      // Mapping to Chart of accounts
-      if (conta_contabil) {
-        if (planoContasMapByMascara.has(conta_contabil)) {
-          conta_contabil = planoContasMapByMascara.get(conta_contabil) || conta_contabil
-        } else if (planoContasMap.has(conta_contabil)) {
-          conta_contabil = planoContasMap.get(conta_contabil) || conta_contabil
+      // Se não encontrou o código reduzido, mas tem a classificação, tenta encontrar o código no plano de contas
+      if (!codigo && classificacao) {
+        const normClass = normalizarMascara(classificacao)
+        if (planoContasMapByClassificacaoToCodigo.has(classificacao)) {
+          codigo = planoContasMapByClassificacaoToCodigo.get(classificacao) || null
+        } else if (planoContasMapByMascaraToCodigo.has(normClass)) {
+          codigo = planoContasMapByMascaraToCodigo.get(normClass) || null
         } else if (fallbackMascara) {
-          const masc = aplicarMascaraAoCodigo(conta_contabil, fallbackMascara)
-          if (planoContasMapByMascara.has(masc)) {
-            conta_contabil = planoContasMapByMascara.get(masc) || masc
-          } else {
-            conta_contabil = masc
+          const masc = aplicarMascaraAoCodigo(classificacao, fallbackMascara)
+          if (planoContasMapByMascaraToCodigo.has(masc)) {
+            codigo = planoContasMapByMascaraToCodigo.get(masc) || null
           }
         }
       }
@@ -415,7 +424,8 @@ Deno.serve(async (req: Request) => {
         colMap.saldo_atual !== -1 ? parseNumeroUniversal(row[colMap.saldo_atual]) : 0
 
       if (
-        !conta_contabil &&
+        !codigo &&
+        !classificacao &&
         saldo_anterior === 0 &&
         debito === 0 &&
         credito === 0 &&
@@ -424,10 +434,12 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      if (conta_contabil && conta_contabil !== '') {
+      // Mesmo que o código seja nulo, se houver saldo e classificação a gente deve importar
+      // Mas o ideal é salvar o codigo na coluna conta_contabil que é o que a conciliação espera
+      if ((codigo && codigo !== '') || (classificacao && classificacao !== '')) {
         toInsert.push({
           importacao_id,
-          conta_contabil,
+          conta_contabil: codigo || classificacao, // Fallback caso realmente nao encontre o codigo
           descricao,
           saldo_anterior,
           debito,

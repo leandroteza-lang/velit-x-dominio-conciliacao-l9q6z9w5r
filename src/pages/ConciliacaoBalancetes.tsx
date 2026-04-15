@@ -134,6 +134,9 @@ export default function ConciliacaoBalancetes() {
           const velit = velitsMap.get(codigo) || {}
           const plano = planoMap.get(codigo) || {}
 
+          const temDominio = !!dominio.codigo
+          const temVelit = !!velit.conta_contabil
+
           const saldo_anterior_dominio = Number(dominio.saldo_anterior) || 0
           const debito_dominio = Number(dominio.debito) || 0
           const credito_dominio = Number(dominio.credito) || 0
@@ -147,10 +150,14 @@ export default function ConciliacaoBalancetes() {
           const diferenca = saldo_atual_dominio - saldo_atual_velit
 
           let status = 'OK'
-          if (!plano.id) {
-            status = 'Sem Conta'
+          if (!temDominio && temVelit) {
+            status = 'Faltando no Domínio'
+          } else if (temDominio && !temVelit) {
+            status = 'Faltando no Velit'
           } else if (Math.abs(diferenca) > 0.01) {
             status = 'Divergência'
+          } else if (!plano.id) {
+            status = 'Sem Conta'
           }
 
           const classificacao = plano.classificacao || dominio.classificacao || '-'
@@ -269,6 +276,13 @@ export default function ConciliacaoBalancetes() {
         </Badge>
       )
     }
+    if (status === 'Faltando no Velit' || status === 'Faltando no Domínio') {
+      return (
+        <Badge className="bg-rose-700 hover:bg-rose-800 text-white font-medium shadow-sm border-0 text-[10px] py-0 px-1.5 leading-tight h-4">
+          {status}
+        </Badge>
+      )
+    }
     return (
       <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm text-yellow-950 border-0 text-[10px] py-0 px-1.5 leading-tight h-4">
         Sem Conta
@@ -276,7 +290,14 @@ export default function ConciliacaoBalancetes() {
     )
   }
 
-  const getRowStyle = (classificacao: string) => {
+  const getRowStyle = (classificacao: string, status: string) => {
+    if (
+      status === 'Divergência' ||
+      status === 'Faltando no Velit' ||
+      status === 'Faltando no Domínio'
+    ) {
+      return 'bg-red-900/90 text-white hover:bg-red-900 border-b-red-950 dark:bg-red-950/80 dark:hover:bg-red-950 font-semibold'
+    }
     if (!classificacao || classificacao === '-')
       return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300'
     const level = classificacao.split('.').length
@@ -389,6 +410,8 @@ export default function ConciliacaoBalancetes() {
                     <SelectItem value="ALL">Todos os Status</SelectItem>
                     <SelectItem value="OK">OK</SelectItem>
                     <SelectItem value="Divergência">Divergência</SelectItem>
+                    <SelectItem value="Faltando no Velit">Faltando no Velit</SelectItem>
+                    <SelectItem value="Faltando no Domínio">Faltando no Domínio</SelectItem>
                     <SelectItem value="Sem Conta">Sem Conta</SelectItem>
                   </SelectContent>
                 </Select>
@@ -476,7 +499,10 @@ export default function ConciliacaoBalancetes() {
                   paginatedData.map((row) => (
                     <TableRow
                       key={row.id}
-                      className={cn('transition-colors', getRowStyle(row.classificacao))}
+                      className={cn(
+                        'transition-colors',
+                        getRowStyle(row.classificacao, row.status),
+                      )}
                     >
                       <TableCell className="py-0.5 px-1 h-auto font-medium whitespace-nowrap">
                         {row.codigo}
@@ -523,9 +549,13 @@ export default function ConciliacaoBalancetes() {
                         className={cn(
                           'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap',
                           row.diferenca !== 0
-                            ? isDarkRow(row.classificacao)
-                              ? 'text-red-300'
-                              : 'text-red-600 dark:text-red-400'
+                            ? row.status === 'Divergência' ||
+                              row.status === 'Faltando no Velit' ||
+                              row.status === 'Faltando no Domínio'
+                              ? 'text-white'
+                              : isDarkRow(row.classificacao)
+                                ? 'text-red-300'
+                                : 'text-red-600 dark:text-red-400'
                             : '',
                         )}
                       >
