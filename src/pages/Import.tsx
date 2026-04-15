@@ -135,6 +135,7 @@ export default function ImportPage() {
   }>({ open: false, data: null, isProcessing: false })
 
   const [importProgress, setImportProgress] = useState(0)
+  const [dominioImportState, setDominioImportState] = useState({ open: false, progress: 0 })
 
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -229,34 +230,56 @@ export default function ImportPage() {
           await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao.id)
         }
 
-        const formData = new FormData()
-        formData.append('file', file)
-        if (importacao) {
-          formData.append('importacao_id', importacao.id)
-        }
+        setDominioImportState({ open: true, progress: 10 })
+        const progressInterval = setInterval(() => {
+          setDominioImportState((prev) => ({
+            ...prev,
+            progress: Math.min(prev.progress + Math.floor(Math.random() * 10) + 5, 90),
+          }))
+        }, 600)
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          if (importacao) {
+            formData.append('importacao_id', importacao.id)
+          }
 
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${session?.access_token}`,
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+
+          const res = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${session?.access_token}`,
+              },
+              body: formData,
             },
-            body: formData,
-          },
-        )
+          )
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error(err.error || 'Erro ao processar o arquivo Domínio.')
+          clearInterval(progressInterval)
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Erro ao processar o arquivo Domínio.')
+          }
+
+          setDominioImportState({ open: true, progress: 100 })
+
+          await new Promise((resolve) => setTimeout(resolve, 800))
+
+          setDominioImportState({ open: false, progress: 0 })
+          toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+          await fetchStatus()
+          navigate('/conciliacao-balancetes')
+        } catch (err) {
+          clearInterval(progressInterval)
+          setDominioImportState({ open: false, progress: 0 })
+          throw err
         }
-
-        toast.success(`Arquivo Domínio importado e processado com sucesso!`)
-        await fetchStatus()
       } else if (step === 1) {
         if (!user) throw new Error('Usuário não autenticado')
         const result = await preparePlanoContasImport(file)
@@ -948,6 +971,30 @@ export default function ImportPage() {
               Cancelar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={dominioImportState.open}
+        onOpenChange={(o) => {
+          if (!o && dominioImportState.progress < 100 && dominioImportState.progress > 0) return
+          setDominioImportState((prev) => ({ ...prev, open: o }))
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importando Balancete Domínio</DialogTitle>
+            <DialogDescription>
+              Enviando e processando os dados. Isso pode levar alguns segundos...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="flex justify-between text-sm font-medium text-slate-700 dark:text-slate-300">
+              <span>Progresso de importação</span>
+              <span>{dominioImportState.progress}%</span>
+            </div>
+            <Progress value={dominioImportState.progress} className="h-2.5" />
+          </div>
         </DialogContent>
       </Dialog>
 

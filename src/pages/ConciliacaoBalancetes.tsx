@@ -291,7 +291,7 @@ export default function ConciliacaoBalancetes() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[1700px]">
               <TableHeader>
                 <TableRow className="bg-slate-100/50 hover:bg-slate-100/50 dark:bg-slate-800/50 dark:hover:bg-slate-800/50">
                   <TableHead
