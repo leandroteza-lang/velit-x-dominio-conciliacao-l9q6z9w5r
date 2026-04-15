@@ -87,24 +87,99 @@ Deno.serve(async (req: Request) => {
       throw new Error('Arquivo vazio ou sem dados suficientes.')
     }
 
-    let mascaraPadrao = ''
-    for (let r = 0; r < jsonData.length; r++) {
-      const row = jsonData[r]
-      const valL = row[11] ? String(row[11]) : ''
-      const m = normalizarMascara(valL)
-      if (m) {
-        mascaraPadrao = m
+    // Identificar as colunas de forma dinâmica (Header scan)
+    let headerRowIdx = -1
+    let colMap = {
+      codigo: -1,
+      classificacao: -1,
+      saldo_anterior: -1,
+      debito: -1,
+      credito: -1,
+      saldo_atual: -1,
+    }
+
+    for (let i = 0; i < Math.min(jsonData.length, 30); i++) {
+      const row = jsonData[i]
+      if (!row || !Array.isArray(row)) continue
+
+      const rowStrings = row.map((c) =>
+        String(c || '')
+          .toLowerCase()
+          .trim(),
+      )
+
+      for (let j = 0; j < rowStrings.length; j++) {
+        const val = rowStrings[j]
+        if (!val) continue
+        if (
+          val === 'conta' ||
+          val === 'código' ||
+          val === 'codigo' ||
+          val === 'cod' ||
+          val === 'cód'
+        )
+          colMap.codigo = j
+        else if (val.includes('classifica') || val === 'máscara' || val === 'mascara')
+          colMap.classificacao = j
+        else if (val.includes('anterior') && !val.includes('atual')) colMap.saldo_anterior = j
+        else if (
+          (val === 'débito' || val === 'debito' || val === 'débitos' || val === 'debitos') &&
+          colMap.debito === -1
+        )
+          colMap.debito = j
+        else if (
+          (val === 'crédito' || val === 'credito' || val === 'créditos' || val === 'creditos') &&
+          colMap.credito === -1
+        )
+          colMap.credito = j
+        else if (val.includes('atual') && !val.includes('anterior')) colMap.saldo_atual = j
+      }
+
+      // Se encontramos pelo menos saldo anterior, saldo atual e código, consideramos como cabeçalho
+      if (colMap.saldo_anterior !== -1 && colMap.saldo_atual !== -1 && colMap.codigo !== -1) {
+        headerRowIdx = i
         break
       }
     }
 
+    // Fallback se não identificar headers claros
+    if (headerRowIdx === -1) {
+      colMap = {
+        codigo: 0,
+        classificacao: 2,
+        saldo_anterior: 4,
+        debito: 5,
+        credito: 6,
+        saldo_atual: 7,
+      }
+      headerRowIdx = 0
+    }
+
+    let mascaraPadrao = ''
+    for (let r = headerRowIdx; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
+      const row = jsonData[r]
+      if (!row) continue
+      // Procura formato de máscara na coluna 11 se existir ou se a classificação tiver pontos
+      const valL = row[11] ? String(row[11]) : ''
+      const m = normalizarMascara(valL)
+      if (m && !mascaraPadrao) {
+        mascaraPadrao = m
+      }
+    }
+
     const toInsert = []
-    for (let r = 1; r < jsonData.length; r++) {
+    for (let r = headerRowIdx + 1; r < jsonData.length; r++) {
       const row = jsonData[r]
       if (!row || row.length === 0) continue
 
-      const codigoRaw = row[0] ? String(row[0]).trim() : null
-      let classificacaoRaw = row[2] ? String(row[2]).trim() : null
+      const codigoRaw =
+        colMap.codigo !== -1 && row[colMap.codigo] != null
+          ? String(row[colMap.codigo]).trim()
+          : null
+      let classificacaoRaw =
+        colMap.classificacao !== -1 && row[colMap.classificacao] != null
+          ? String(row[colMap.classificacao]).trim()
+          : null
 
       let codigo = codigoRaw
       let classificacao = classificacaoRaw
@@ -115,10 +190,24 @@ Deno.serve(async (req: Request) => {
         classificacao = aplicarMascaraAoCodigo(classificacao, mascaraPadrao)
       }
 
-      const saldo_anterior = parseNumeroUniversal(row[4])
-      const debito = parseNumeroUniversal(row[5])
-      const credito = parseNumeroUniversal(row[6])
-      const saldo_atual = parseNumeroUniversal(row[7])
+      const saldo_anterior =
+        colMap.saldo_anterior !== -1 ? parseNumeroUniversal(row[colMap.saldo_anterior]) : 0
+      const debito = colMap.debito !== -1 ? parseNumeroUniversal(row[colMap.debito]) : 0
+      const credito = colMap.credito !== -1 ? parseNumeroUniversal(row[colMap.credito]) : 0
+      const saldo_atual =
+        colMap.saldo_atual !== -1 ? parseNumeroUniversal(row[colMap.saldo_atual]) : 0
+
+      // Ignorar linhas completamente vazias ou de saldo zerado sem identificação
+      if (
+        !codigo &&
+        !classificacao &&
+        saldo_anterior === 0 &&
+        debito === 0 &&
+        credito === 0 &&
+        saldo_atual === 0
+      ) {
+        continue
+      }
 
       if ((codigo && codigo !== '') || (classificacao && classificacao !== '')) {
         toInsert.push({
@@ -134,7 +223,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (toInsert.length === 0) {
-      throw new Error('Nenhum dado válido encontrado para importar.')
+      throw new Error('Nenhum dado válido encontrado para importar. Verifique o layout do arquivo.')
     }
 
     await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao_id)

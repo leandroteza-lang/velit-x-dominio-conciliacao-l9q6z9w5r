@@ -27,11 +27,14 @@ type ConciliacaoRow = {
   codigo: string
   classificacao: string
   nome: string
+  saldo_anterior_velit: number
+  debito_velit: number
+  credito_velit: number
+  saldo_atual_velit: number
   saldo_anterior_dominio: number
   debito_dominio: number
   credito_dominio: number
   saldo_atual_dominio: number
-  saldo_atual_velit: number
   diferenca: number
   status: string
 }
@@ -110,8 +113,16 @@ export default function ConciliacaoBalancetes() {
           const velit = velitsMap.get(codigo) || {}
           const plano = planoMap.get(codigo) || {}
 
+          const saldo_anterior_dominio = Number(dominio.saldo_anterior) || 0
+          const debito_dominio = Number(dominio.debito) || 0
+          const credito_dominio = Number(dominio.credito) || 0
           const saldo_atual_dominio = Number(dominio.saldo_atual) || 0
+
+          const saldo_anterior_velit = Number(velit.saldo_anterior) || 0
+          const debito_velit = Number(velit.debito) || 0
+          const credito_velit = Number(velit.credito) || 0
           const saldo_atual_velit = Number(velit.saldo_atual) || 0
+
           const diferenca = saldo_atual_dominio - saldo_atual_velit
 
           let status = 'OK'
@@ -129,11 +140,14 @@ export default function ConciliacaoBalancetes() {
             codigo: codigo,
             classificacao: classificacao,
             nome: nome,
-            saldo_anterior_dominio: Number(dominio.saldo_anterior) || 0,
-            debito_dominio: Number(dominio.debito) || 0,
-            credito_dominio: Number(dominio.credito) || 0,
-            saldo_atual_dominio: saldo_atual_dominio,
-            saldo_atual_velit: saldo_atual_velit,
+            saldo_anterior_velit,
+            debito_velit,
+            credito_velit,
+            saldo_atual_velit,
+            saldo_anterior_dominio,
+            debito_dominio,
+            credito_dominio,
+            saldo_atual_dominio,
             diferenca: diferenca,
             status: status,
           }
@@ -240,7 +254,7 @@ export default function ConciliacaoBalancetes() {
             Conciliação de Balancetes
           </h1>
           <p className="text-slate-500 mt-1 text-sm sm:text-base">
-            Conferência detalhada entre os saldos do Domínio e da VELIT.
+            Conferência detalhada entre os saldos da VELIT e do Domínio.
           </p>
         </div>
       </div>
@@ -279,6 +293,32 @@ export default function ConciliacaoBalancetes() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
+                <TableRow className="bg-slate-100/50 hover:bg-slate-100/50 dark:bg-slate-800/50 dark:hover:bg-slate-800/50">
+                  <TableHead
+                    colSpan={3}
+                    className="text-center font-bold border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                  >
+                    Identificação da Conta
+                  </TableHead>
+                  <TableHead
+                    colSpan={4}
+                    className="text-center font-bold bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-900/50"
+                  >
+                    VELIT
+                  </TableHead>
+                  <TableHead
+                    colSpan={4}
+                    className="text-center font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-900/50"
+                  >
+                    DOMÍNIO
+                  </TableHead>
+                  <TableHead
+                    colSpan={2}
+                    className="text-center font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                  >
+                    Análise
+                  </TableHead>
+                </TableRow>
                 <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-900/50">
                   <TableHead className="font-semibold text-slate-700 dark:text-slate-300 min-w-[100px]">
                     Código
@@ -286,24 +326,36 @@ export default function ConciliacaoBalancetes() {
                   <TableHead className="font-semibold text-slate-700 dark:text-slate-300 min-w-[130px]">
                     Classificação
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 min-w-[220px]">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 min-w-[220px] border-r border-slate-200 dark:border-slate-700">
                     Nome da Conta
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[130px]">
-                    Saldo Ant. (Domínio)
+
+                  <TableHead className="font-semibold text-indigo-700 dark:text-indigo-300 text-right min-w-[130px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                    Saldo Ant.
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[120px]">
-                    Débito (Domínio)
+                  <TableHead className="font-semibold text-indigo-700 dark:text-indigo-300 text-right min-w-[120px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                    Débito
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[120px]">
-                    Crédito (Domínio)
+                  <TableHead className="font-semibold text-indigo-700 dark:text-indigo-300 text-right min-w-[120px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                    Crédito
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px]">
-                    Saldo Atual (Domínio)
+                  <TableHead className="font-semibold text-indigo-900 dark:text-indigo-200 text-right min-w-[140px] border-r border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    Saldo Atual
                   </TableHead>
-                  <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[140px]">
-                    Saldo Atual (VELIT)
+
+                  <TableHead className="font-semibold text-emerald-700 dark:text-emerald-300 text-right min-w-[130px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                    Saldo Ant.
                   </TableHead>
+                  <TableHead className="font-semibold text-emerald-700 dark:text-emerald-300 text-right min-w-[120px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                    Débito
+                  </TableHead>
+                  <TableHead className="font-semibold text-emerald-700 dark:text-emerald-300 text-right min-w-[120px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                    Crédito
+                  </TableHead>
+                  <TableHead className="font-semibold text-emerald-900 dark:text-emerald-200 text-right min-w-[140px] border-r border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20">
+                    Saldo Atual
+                  </TableHead>
+
                   <TableHead className="font-semibold text-slate-700 dark:text-slate-300 text-right min-w-[120px]">
                     Diferença
                   </TableHead>
@@ -321,26 +373,38 @@ export default function ConciliacaoBalancetes() {
                     >
                       <TableCell className="font-medium">{row.codigo}</TableCell>
                       <TableCell className="opacity-90">{row.classificacao}</TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-slate-200/50 dark:border-slate-800/50">
                         <span className="block truncate max-w-[220px]" title={row.nome}>
                           {row.nome}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-90">
-                        {formatCurrency(row.saldo_anterior_dominio)}
+
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                        {formatCurrency(row.saldo_anterior_velit)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-90">
-                        {formatCurrency(row.debito_dominio)}
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                        {formatCurrency(row.debito_velit)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap opacity-90">
-                        {formatCurrency(row.credito_dominio)}
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                        {formatCurrency(row.credito_velit)}
                       </TableCell>
-                      <TableCell className="text-right font-medium whitespace-nowrap">
-                        {formatCurrency(row.saldo_atual_dominio)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium whitespace-nowrap">
+                      <TableCell className="text-right font-medium whitespace-nowrap border-r border-indigo-500/20 bg-indigo-500/10">
                         {formatCurrency(row.saldo_atual_velit)}
                       </TableCell>
+
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                        {formatCurrency(row.saldo_anterior_dominio)}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                        {formatCurrency(row.debito_dominio)}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                        {formatCurrency(row.credito_dominio)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium whitespace-nowrap border-r border-emerald-500/20 bg-emerald-500/10">
+                        {formatCurrency(row.saldo_atual_dominio)}
+                      </TableCell>
+
                       <TableCell
                         className={cn(
                           'text-right font-bold whitespace-nowrap',
@@ -358,7 +422,7 @@ export default function ConciliacaoBalancetes() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-40 text-center">
+                    <TableCell colSpan={14} className="h-40 text-center">
                       <div className="flex flex-col items-center justify-center text-slate-500">
                         <FileX className="w-10 h-10 mb-3 opacity-30" />
                         <p className="font-medium">
