@@ -222,7 +222,42 @@ export default function ImportPage() {
 
     setIsProcessingLocal(true)
     try {
-      if (step === 1) {
+      if (step === 2) {
+        if (!user) throw new Error('Usuário não autenticado')
+
+        if (importacao && counts[step] > 0) {
+          await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao.id)
+        }
+
+        const formData = new FormData()
+        formData.append('file', file)
+        if (importacao) {
+          formData.append('importacao_id', importacao.id)
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${session?.access_token}`,
+            },
+            body: formData,
+          },
+        )
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || 'Erro ao processar o arquivo Domínio.')
+        }
+
+        toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+        await fetchStatus()
+      } else if (step === 1) {
         if (!user) throw new Error('Usuário não autenticado')
         const result = await preparePlanoContasImport(file)
 
@@ -947,7 +982,7 @@ export default function ImportPage() {
               <div className="p-8 flex justify-center items-center h-full">
                 <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
               </div>
-            ) : fullViewStep === 1 ? (
+            ) : fullViewStep === 1 || fullViewStep === 2 ? (
               <Table>
                 <TableHeader>
                   <TableRow className="bg-[#003366] hover:bg-[#003366]">
@@ -963,9 +998,20 @@ export default function ImportPage() {
                 </TableHeader>
                 <TableBody>
                   {previewData.map((row, i) => {
-                    const niveisConta = (row.classificacao || '').split('.').length
-                    const niveisMascara = (row.mascara || '').split('.').length
-                    const isHighlighted = niveisConta <= niveisMascara - 1
+                    let isHighlighted = false
+                    if (fullViewStep === 1) {
+                      const niveisConta = (row.classificacao || '').split('.').length
+                      const niveisMascara = (row.mascara || '').split('.').length
+                      isHighlighted = niveisConta <= niveisMascara - 1
+                    } else if (fullViewStep === 2) {
+                      const classificacao = (row.classificacao || '').trim()
+                      if (classificacao) {
+                        const niveisConta = classificacao.split('.').length
+                        isHighlighted = niveisConta <= 4
+                      }
+                    }
+
+                    const currentColumns = CARDS.find((c) => c.step === fullViewStep)?.columns || []
 
                     return (
                       <TableRow
@@ -976,17 +1022,33 @@ export default function ImportPage() {
                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
                         )}
                       >
-                        {CARDS.find((c) => c.step === 1)?.columns.map((col, j) => (
-                          <TableCell
-                            key={j}
-                            className={cn(
-                              'border border-slate-200 dark:border-slate-800',
-                              col === 'codigo' && 'text-center',
-                            )}
-                          >
-                            {row[col]}
-                          </TableCell>
-                        ))}
+                        {currentColumns.map((col, j) => {
+                          const isNumber = [
+                            'saldo_anterior',
+                            'debito',
+                            'credito',
+                            'saldo_atual',
+                          ].includes(col)
+                          let displayValue = row[col]
+                          if (isNumber && typeof displayValue === 'number') {
+                            displayValue = new Intl.NumberFormat('pt-BR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            }).format(displayValue)
+                          }
+                          return (
+                            <TableCell
+                              key={j}
+                              className={cn(
+                                'border border-slate-200 dark:border-slate-800',
+                                col === 'codigo' && 'text-center',
+                                isNumber && 'text-right pr-4',
+                              )}
+                            >
+                              {displayValue}
+                            </TableCell>
+                          )
+                        })}
                       </TableRow>
                     )
                   })}
