@@ -66,29 +66,41 @@ export default function ConciliacaoBalancetes() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [currentPage, setCurrentPage] = useState(1)
+  const [importacoes, setImportacoes] = useState<any[]>([])
+  const [selectedImportId, setSelectedImportId] = useState<string>('')
   const itemsPerPage = 50
 
   useEffect(() => {
+    const fetchPeriods = async () => {
+      try {
+        const { data: importsList } = await supabase
+          .from('importacoes')
+          .select('id, data_inicio, data_fim, created_at')
+          .order('data_inicio', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+
+        setImportacoes(importsList || [])
+        if (importsList && importsList.length > 0) {
+          if (!selectedImportId) setSelectedImportId(importsList[0].id)
+        } else {
+          setLoading(false)
+        }
+      } catch (err) {
+        setLoading(false)
+      }
+    }
+    fetchPeriods()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     const loadData = async () => {
+      if (!selectedImportId) return
       setLoading(true)
       try {
-        const { data: imports } = await supabase
-          .from('importacoes')
-          .select('id')
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (!imports || imports.length === 0) {
-          setData([])
-          setLoading(false)
-          return
-        }
-
-        const importId = imports[0].id
-
         const [dominiosRes, velitsRes, planoContas] = await Promise.all([
-          supabase.from('balancete_dominio').select('*').eq('importacao_id', importId),
-          supabase.from('balancete_velit').select('*').eq('importacao_id', importId),
+          supabase.from('balancete_dominio').select('*').eq('importacao_id', selectedImportId),
+          supabase.from('balancete_velit').select('*').eq('importacao_id', selectedImportId),
           fetchAllPlanoContas(),
         ])
 
@@ -168,7 +180,7 @@ export default function ConciliacaoBalancetes() {
     }
 
     loadData()
-  }, [])
+  }, [selectedImportId])
 
   const filteredData = useMemo(() => {
     return data.filter((item) => {
@@ -261,8 +273,8 @@ export default function ConciliacaoBalancetes() {
 
       <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-            <div className="relative w-full sm:max-w-md">
+          <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center flex-wrap">
+            <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
               <Input
                 placeholder="Buscar por código ou nome da conta..."
@@ -271,95 +283,131 @@ export default function ConciliacaoBalancetes() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <span className="text-sm font-medium text-slate-500 whitespace-nowrap">
-                Filtrar Status:
-              </span>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-slate-950 shadow-sm">
-                  <SelectValue placeholder="Todos os Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Status</SelectItem>
-                  <SelectItem value="OK">OK</SelectItem>
-                  <SelectItem value="Divergência">Divergência</SelectItem>
-                  <SelectItem value="Sem Conta">Sem Conta</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                <span className="text-sm font-medium text-slate-500 whitespace-nowrap">
+                  Período:
+                </span>
+                <Select value={selectedImportId} onValueChange={setSelectedImportId}>
+                  <SelectTrigger className="w-full sm:w-[220px] bg-white dark:bg-slate-950 shadow-sm">
+                    <SelectValue placeholder="Selecione um período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {importacoes.map((imp) => {
+                      let label = ''
+                      if (imp.data_inicio && imp.data_fim) {
+                        const start = new Date(imp.data_inicio).toLocaleDateString('pt-BR', {
+                          timeZone: 'UTC',
+                        })
+                        const end = new Date(imp.data_fim).toLocaleDateString('pt-BR', {
+                          timeZone: 'UTC',
+                        })
+                        label = `${start} a ${end}`
+                      } else {
+                        label = `Importação de ${new Date(imp.created_at).toLocaleDateString(
+                          'pt-BR',
+                        )}`
+                      }
+                      return (
+                        <SelectItem key={imp.id} value={imp.id}>
+                          {label}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                <span className="text-sm font-medium text-slate-500 whitespace-nowrap">
+                  Filtrar Status:
+                </span>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-slate-950 shadow-sm">
+                    <SelectValue placeholder="Todos os Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos os Status</SelectItem>
+                    <SelectItem value="OK">OK</SelectItem>
+                    <SelectItem value="Divergência">Divergência</SelectItem>
+                    <SelectItem value="Sem Conta">Sem Conta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto w-full">
-            <Table className="w-full text-[11px] sm:text-xs">
+            <Table className="w-full text-[10px] leading-tight table-auto">
               <TableHeader>
                 <TableRow className="bg-slate-100/50 hover:bg-slate-100/50 dark:bg-slate-800/50 dark:hover:bg-slate-800/50">
                   <TableHead
                     colSpan={3}
-                    className="py-1.5 px-2 h-auto text-center font-bold border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                    className="py-1 px-1 h-auto text-center font-bold border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
                   >
                     Identificação da Conta
                   </TableHead>
                   <TableHead
                     colSpan={4}
-                    className="py-1.5 px-2 h-auto text-center font-bold bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-900/50"
+                    className="py-1 px-1 h-auto text-center font-bold bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-900/50"
                   >
                     VELIT
                   </TableHead>
                   <TableHead
                     colSpan={4}
-                    className="py-1.5 px-2 h-auto text-center font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-900/50"
+                    className="py-1 px-1 h-auto text-center font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-900/50"
                   >
                     DOMÍNIO
                   </TableHead>
                   <TableHead
                     colSpan={2}
-                    className="py-1.5 px-2 h-auto text-center font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                    className="py-1 px-1 h-auto text-center font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
                   >
                     Análise
                   </TableHead>
                 </TableRow>
                 <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-900/50">
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-slate-700 dark:text-slate-300 w-[60px] sm:w-[80px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                     Código
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-slate-700 dark:text-slate-300 w-[80px] sm:w-[100px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                     Classificação
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-slate-700 dark:text-slate-300 w-[140px] sm:w-[200px] border-r border-slate-200 dark:border-slate-700">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 w-full min-w-[150px]">
                     Nome da Conta
                   </TableHead>
 
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right w-[80px] sm:w-[100px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
                     Saldo Ant.
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right w-[80px] sm:w-[90px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
                     Débito
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right w-[80px] sm:w-[90px] bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
                     Crédito
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right w-[80px] sm:w-[100px] border-r border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right whitespace-nowrap border-r border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20">
                     Saldo Atual
                   </TableHead>
 
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right w-[80px] sm:w-[100px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
                     Saldo Ant.
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right w-[80px] sm:w-[90px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
                     Débito
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right w-[80px] sm:w-[90px] bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
                     Crédito
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right w-[80px] sm:w-[100px] border-r border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right whitespace-nowrap border-r border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20">
                     Saldo Atual
                   </TableHead>
 
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right w-[80px] sm:w-[100px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
                     Diferença
                   </TableHead>
-                  <TableHead className="py-1.5 px-2 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center w-[60px] sm:w-[80px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
                     Status
                   </TableHead>
                 </TableRow>
@@ -371,48 +419,50 @@ export default function ConciliacaoBalancetes() {
                       key={row.id}
                       className={cn('transition-colors', getRowStyle(row.classificacao))}
                     >
-                      <TableCell className="py-1 px-2 h-auto font-medium">{row.codigo}</TableCell>
-                      <TableCell className="py-1 px-2 h-auto opacity-90">
+                      <TableCell className="py-0.5 px-1 h-auto font-medium whitespace-nowrap">
+                        {row.codigo}
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1 h-auto opacity-90 whitespace-nowrap">
                         {row.classificacao}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto border-r border-slate-200/50 dark:border-slate-800/50">
+                      <TableCell className="py-0.5 px-1 h-auto border-r border-slate-200/50 dark:border-slate-800/50">
                         <span
-                          className="block truncate max-w-[140px] sm:max-w-[200px]"
+                          className="block truncate max-w-[150px] sm:max-w-[200px]"
                           title={row.nome}
                         >
                           {row.nome}
                         </span>
                       </TableCell>
 
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
                         {formatCurrency(row.saldo_anterior_velit)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
                         {formatCurrency(row.debito_velit)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
                         {formatCurrency(row.credito_velit)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r border-indigo-500/20 bg-indigo-500/10">
+                      <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-indigo-500/20 bg-indigo-500/10">
                         {formatCurrency(row.saldo_atual_velit)}
                       </TableCell>
 
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
                         {formatCurrency(row.saldo_anterior_dominio)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
                         {formatCurrency(row.debito_dominio)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
+                      <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
                         {formatCurrency(row.credito_dominio)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r border-emerald-500/20 bg-emerald-500/10">
+                      <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-emerald-500/20 bg-emerald-500/10">
                         {formatCurrency(row.saldo_atual_dominio)}
                       </TableCell>
 
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap',
+                          'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap',
                           row.diferenca !== 0
                             ? isDarkRow(row.classificacao)
                               ? 'text-red-300'
@@ -422,7 +472,7 @@ export default function ConciliacaoBalancetes() {
                       >
                         {formatCurrency(row.diferenca)}
                       </TableCell>
-                      <TableCell className="py-1 px-2 h-auto text-center">
+                      <TableCell className="py-0.5 px-1 h-auto text-center whitespace-nowrap">
                         {getStatusBadge(row.status)}
                       </TableCell>
                     </TableRow>

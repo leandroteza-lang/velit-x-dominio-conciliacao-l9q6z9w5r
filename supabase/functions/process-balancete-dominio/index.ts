@@ -3,6 +3,104 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import * as XLSX from 'npm:xlsx@0.18.5'
 
+function parseExcelDate(v: any): string | null {
+  if (!v) return null
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000))
+    if (isNaN(d.getTime())) return null
+    return d.toISOString().split('T')[0]
+  }
+  if (typeof v === 'string') {
+    const s = v.trim()
+    const parts = s.split('/')
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`
+    }
+    const partsDash = s.split('-')
+    if (partsDash.length === 3) {
+      if (partsDash[0].length === 4) return s.substring(0, 10)
+    }
+  }
+  return null
+}
+
+function parseNumeroUniversal(v: any): number {
+  if (typeof v === 'number') return v
+  if (!v) return 0
+  let s = String(v)
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/\u00A0/g, '')
+  const lastDot = s.lastIndexOf('.')
+  const lastComma = s.lastIndexOf(',')
+  let decSep = '.'
+  let thouSep = ','
+  if (lastDot === -1 && lastComma === -1) {
+    return Number(s) || 0
+  } else if (lastDot > lastComma) {
+    decSep = '.'
+    thouSep = ','
+  } else {
+    decSep = ','
+    thouSep = '.'
+  }
+  s = s.split(thouSep).join('')
+  if (decSep === ',') s = s.replace(',', '.')
+  return Number(s) || 0
+}
+
+function normalizarMascara(s: string): string {
+  if (!s) return ''
+  let out = s
+    .trim()
+    .replace(/\u00A0/g, '')
+    .replace(/\s/g, '')
+  while (out.includes('..')) out = out.replace('..', '.')
+  while (out.endsWith('.')) out = out.slice(0, -1)
+  return out
+}
+
+function somenteDigitos(s: string): string {
+  if (!s) return ''
+  return String(s).replace(/\D/g, '')
+}
+
+function aplicarMascaraAoCodigo(codigo: string, mascara: string): string {
+  mascara = normalizarMascara(mascara)
+  if (!mascara) return String(codigo).trim()
+
+  const codigoLimpo = somenteDigitos(codigo)
+  if (!codigoLimpo) return ''
+
+  const tokens = mascara.split('.')
+  const lens = tokens.map((t) => t.length)
+
+  const partes: string[] = []
+  let pos = 0
+
+  for (const len of lens) {
+    if (pos >= codigoLimpo.length) break
+    if (pos + len <= codigoLimpo.length) {
+      partes.push(codigoLimpo.slice(pos, pos + len))
+      pos += len
+    } else {
+      partes.push(codigoLimpo.slice(pos))
+      pos = codigoLimpo.length
+      break
+    }
+  }
+
+  if (pos < codigoLimpo.length) {
+    if (partes.length === 0) {
+      partes.push(codigoLimpo.slice(pos))
+    } else {
+      partes[partes.length - 1] += codigoLimpo.slice(pos)
+    }
+  }
+
+  return partes.join('.')
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -23,7 +121,8 @@ Deno.serve(async (req: Request) => {
 
     const formData = await req.formData()
     const file = formData.get('file') as File
-    let importacao_id = formData.get('importacao_id') as string
+    const action = formData.get('action') as string | null
+    const existing_id = formData.get('existing_id') as string | null
 
     if (!file) {
       throw new Error('Nenhum arquivo enviado.')
@@ -34,16 +133,6 @@ Deno.serve(async (req: Request) => {
       error: authErr,
     } = await supabase.auth.getUser()
     if (authErr || !user) throw new Error('Não autenticado')
-
-    if (!importacao_id || importacao_id === 'undefined') {
-      const { data: newImp, error: impErr } = await supabase
-        .from('importacoes')
-        .insert({ user_id: user.id, status: 'PENDING' })
-        .select('id')
-        .single()
-      if (impErr) throw impErr
-      importacao_id = newImp.id
-    }
 
     // Fetch user's plano_contas to do DE/PARA (with pagination)
     let planoContasData: any[] = []
@@ -135,14 +224,12 @@ Deno.serve(async (req: Request) => {
         else if (val.includes('atual') && !val.includes('anterior')) colMap.saldo_atual = j
       }
 
-      // Se encontramos pelo menos saldo anterior, saldo atual e código, consideramos como cabeçalho
       if (colMap.saldo_anterior !== -1 && colMap.saldo_atual !== -1 && colMap.codigo !== -1) {
         headerRowIdx = i
         break
       }
     }
 
-    // Fallback se não identificar headers claros
     if (headerRowIdx === -1) {
       colMap = {
         codigo: 0,
@@ -155,11 +242,67 @@ Deno.serve(async (req: Request) => {
       headerRowIdx = 0
     }
 
+    let data_inicio = null
+    let data_fim = null
+
+    for (let r = headerRowIdx + 1; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
+      const row = jsonData[r]
+      if (row) {
+        if (!data_inicio && row[16]) data_inicio = parseExcelDate(row[16])
+        if (!data_fim && row[17]) data_fim = parseExcelDate(row[17])
+      }
+      if (data_inicio && data_fim) break
+    }
+
+    if (data_inicio && data_fim && !action) {
+      const { data: existing } = await supabase
+        .from('importacoes')
+        .select('id, data_inicio, data_fim')
+        .eq('user_id', user.id)
+        .eq('data_inicio', data_inicio)
+        .eq('data_fim', data_fim)
+        .single()
+
+      if (existing) {
+        return new Response(
+          JSON.stringify({
+            requiresAction: true,
+            data_inicio,
+            data_fim,
+            existing_id: existing.id,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          },
+        )
+      }
+    }
+
+    let importacao_id = existing_id
+    if (!importacao_id || importacao_id === 'undefined') {
+      const { data: newImp, error: impErr } = await supabase
+        .from('importacoes')
+        .insert({
+          user_id: user.id,
+          status: 'PENDING',
+          data_inicio: data_inicio || null,
+          data_fim: data_fim || null,
+        })
+        .select('id')
+        .single()
+      if (impErr) throw impErr
+      importacao_id = newImp.id
+    } else {
+      await supabase
+        .from('importacoes')
+        .update({ created_at: new Date().toISOString() })
+        .eq('id', importacao_id)
+    }
+
     let mascaraPadrao = ''
     for (let r = headerRowIdx; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
       const row = jsonData[r]
       if (!row) continue
-      // Procura formato de máscara na coluna 11 se existir ou se a classificação tiver pontos
       const valL = row[11] ? String(row[11]) : ''
       const m = normalizarMascara(valL)
       if (m && !mascaraPadrao) {
@@ -197,7 +340,6 @@ Deno.serve(async (req: Request) => {
       const saldo_atual =
         colMap.saldo_atual !== -1 ? parseNumeroUniversal(row[colMap.saldo_atual]) : 0
 
-      // Ignorar linhas completamente vazias ou de saldo zerado sem identificação
       if (
         !codigo &&
         !classificacao &&
@@ -226,9 +368,10 @@ Deno.serve(async (req: Request) => {
       throw new Error('Nenhum dado válido encontrado para importar. Verifique o layout do arquivo.')
     }
 
-    await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao_id)
+    if (action === 'REPLACE' || !action) {
+      await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao_id)
+    }
 
-    // Insert em lotes de 1000
     for (let i = 0; i < toInsert.length; i += 1000) {
       const chunk = toInsert.slice(i, i + 1000)
       const { error } = await supabase.from('balancete_dominio').insert(chunk)
@@ -245,80 +388,3 @@ Deno.serve(async (req: Request) => {
     })
   }
 })
-
-function parseNumeroUniversal(v: any): number {
-  if (typeof v === 'number') return v
-  if (!v) return 0
-  let s = String(v)
-    .trim()
-    .replace(/\s/g, '')
-    .replace(/\u00A0/g, '')
-  const lastDot = s.lastIndexOf('.')
-  const lastComma = s.lastIndexOf(',')
-  let decSep = '.'
-  let thouSep = ','
-  if (lastDot === -1 && lastComma === -1) {
-    return Number(s) || 0
-  } else if (lastDot > lastComma) {
-    decSep = '.'
-    thouSep = ','
-  } else {
-    decSep = ','
-    thouSep = '.'
-  }
-  s = s.split(thouSep).join('')
-  if (decSep === ',') s = s.replace(',', '.')
-  return Number(s) || 0
-}
-
-function normalizarMascara(s: string): string {
-  if (!s) return ''
-  let out = s
-    .trim()
-    .replace(/\u00A0/g, '')
-    .replace(/\s/g, '')
-  while (out.includes('..')) out = out.replace('..', '.')
-  while (out.endsWith('.')) out = out.slice(0, -1)
-  return out
-}
-
-function somenteDigitos(s: string): string {
-  if (!s) return ''
-  return String(s).replace(/\D/g, '')
-}
-
-function aplicarMascaraAoCodigo(codigo: string, mascara: string): string {
-  mascara = normalizarMascara(mascara)
-  if (!mascara) return String(codigo).trim()
-
-  const codigoLimpo = somenteDigitos(codigo)
-  if (!codigoLimpo) return ''
-
-  const tokens = mascara.split('.')
-  const lens = tokens.map((t) => t.length)
-
-  const partes: string[] = []
-  let pos = 0
-
-  for (const len of lens) {
-    if (pos >= codigoLimpo.length) break
-    if (pos + len <= codigoLimpo.length) {
-      partes.push(codigoLimpo.slice(pos, pos + len))
-      pos += len
-    } else {
-      partes.push(codigoLimpo.slice(pos))
-      pos = codigoLimpo.length
-      break
-    }
-  }
-
-  if (pos < codigoLimpo.length) {
-    if (partes.length === 0) {
-      partes.push(codigoLimpo.slice(pos))
-    } else {
-      partes[partes.length - 1] += codigoLimpo.slice(pos)
-    }
-  }
-
-  return partes.join('.')
-}

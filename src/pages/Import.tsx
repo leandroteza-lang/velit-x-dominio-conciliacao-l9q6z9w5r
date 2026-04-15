@@ -128,6 +128,14 @@ export default function ImportPage() {
     step: null,
   })
 
+  const [periodConflictDialog, setPeriodConflictDialog] = useState<{
+    open: boolean
+    data_inicio: string
+    data_fim: string
+    existing_id: string
+    file: File | null
+  }>({ open: false, data_inicio: '', data_fim: '', existing_id: '', file: null })
+
   const [pcImportDialog, setPcImportDialog] = useState<{
     open: boolean
     data: any | null
@@ -241,9 +249,6 @@ export default function ImportPage() {
         try {
           const formData = new FormData()
           formData.append('file', file)
-          if (importacao) {
-            formData.append('importacao_id', importacao.id)
-          }
 
           const {
             data: { session },
@@ -261,10 +266,22 @@ export default function ImportPage() {
           )
 
           clearInterval(progressInterval)
+          const result = await res.json().catch(() => ({}))
 
           if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            throw new Error(err.error || 'Erro ao processar o arquivo Domínio.')
+            throw new Error(result.error || 'Erro ao processar o arquivo Domínio.')
+          }
+
+          if (result.requiresAction) {
+            setDominioImportState({ open: false, progress: 0 })
+            setPeriodConflictDialog({
+              open: true,
+              data_inicio: result.data_inicio,
+              data_fim: result.data_fim,
+              existing_id: result.existing_id,
+              file,
+            })
+            return
           }
 
           setDominioImportState({ open: true, progress: 100 })
@@ -353,6 +370,56 @@ export default function ImportPage() {
       if (event.target) {
         event.target.value = ''
       }
+    }
+  }
+
+  const handlePeriodAction = async (action: 'REPLACE' | 'APPEND') => {
+    if (!periodConflictDialog.file) return
+    setPeriodConflictDialog((prev) => ({ ...prev, open: false }))
+    setDominioImportState({ open: true, progress: 10 })
+
+    const progressInterval = setInterval(() => {
+      setDominioImportState((prev) => ({
+        ...prev,
+        progress: Math.min(prev.progress + Math.floor(Math.random() * 10) + 5, 90),
+      }))
+    }, 600)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', periodConflictDialog.file)
+      formData.append('action', action)
+      formData.append('existing_id', periodConflictDialog.existing_id)
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+          body: formData,
+        },
+      )
+
+      clearInterval(progressInterval)
+
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || 'Erro ao processar o arquivo Domínio.')
+
+      setDominioImportState({ open: true, progress: 100 })
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      setDominioImportState({ open: false, progress: 0 })
+
+      toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+      await fetchStatus()
+      navigate('/conciliacao-balancetes')
+    } catch (err: any) {
+      clearInterval(progressInterval)
+      setDominioImportState({ open: false, progress: 0 })
+      toast.error('Erro ao importar: ' + err.message)
     }
   }
 
@@ -890,6 +957,65 @@ export default function ImportPage() {
           !pcImportDialog.isProcessing && setPcImportDialog((prev) => ({ ...prev, open: o }))
         }
       >
+        <Dialog
+          open={periodConflictDialog.open}
+          onOpenChange={(o) => !o && setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Período já importado</DialogTitle>
+              <DialogDescription>
+                Identificamos que o período de{' '}
+                <strong className="text-foreground">
+                  {periodConflictDialog.data_inicio &&
+                    new Date(periodConflictDialog.data_inicio).toLocaleDateString('pt-BR', {
+                      timeZone: 'UTC',
+                    })}
+                </strong>{' '}
+                a{' '}
+                <strong className="text-foreground">
+                  {periodConflictDialog.data_fim &&
+                    new Date(periodConflictDialog.data_fim).toLocaleDateString('pt-BR', {
+                      timeZone: 'UTC',
+                    })}
+                </strong>{' '}
+                já existe no sistema. Como deseja prosseguir?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-4">
+              <Button
+                variant="outline"
+                className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-amber-200 hover:bg-amber-50 dark:border-amber-900 dark:hover:bg-amber-950/30"
+                onClick={() => handlePeriodAction('REPLACE')}
+              >
+                <span className="font-semibold text-amber-600">Substituir Tudo</span>
+                <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                  Remove os dados antigos deste período e insere os novos (ideal para correções).
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-primary/20 hover:bg-primary/5"
+                onClick={() => handlePeriodAction('APPEND')}
+              >
+                <span className="font-semibold text-primary">Adicionar Apenas Novos</span>
+                <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                  Realiza uma mesclagem, mantendo o que já existe e apenas inserindo registros que
+                  ainda não constam na base.
+                </span>
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
+              >
+                Cancelar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Importação do Plano de Contas</DialogTitle>
