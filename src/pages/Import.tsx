@@ -209,7 +209,7 @@ export default function ImportPage() {
   }
 
   const handleCardUploadClick = (step: number) => {
-    if (step === 1) {
+    if (step === 1 || step === 2) {
       fileInputRefs.current[step]?.click()
       return
     }
@@ -236,10 +236,6 @@ export default function ImportPage() {
     try {
       if (step === 2) {
         if (!user) throw new Error('Usuário não autenticado')
-
-        if (importacao && counts[step] > 0) {
-          await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao.id)
-        }
 
         setDominioImportState({ open: true, progress: 10 })
         const progressInterval = setInterval(() => {
@@ -824,7 +820,7 @@ export default function ImportPage() {
                   disabled={isBusy}
                 >
                   <UploadCloud className="w-4 h-4 mr-2" />
-                  {hasData && card.step !== 1 ? 'Substituir' : 'Importar'}
+                  {hasData && card.step !== 1 && card.step !== 2 ? 'Substituir' : 'Importar'}
                 </Button>
                 {hasData && (
                   <Button
