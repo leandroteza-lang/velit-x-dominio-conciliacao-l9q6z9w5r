@@ -137,7 +137,8 @@ export default function ImportPage() {
     existing_count?: number
     total_count?: number
     file: File | null
-  }>({ open: false, data_inicio: '', data_fim: '', existing_id: '', file: null })
+    step: number
+  }>({ open: false, data_inicio: '', data_fim: '', existing_id: '', file: null, step: 2 })
 
   const [pcImportDialog, setPcImportDialog] = useState<{
     open: boolean
@@ -146,7 +147,11 @@ export default function ImportPage() {
   }>({ open: false, data: null, isProcessing: false })
 
   const [importProgress, setImportProgress] = useState(0)
-  const [dominioImportState, setDominioImportState] = useState({ open: false, progress: 0 })
+  const [systemImportState, setSystemImportState] = useState({
+    open: false,
+    progress: 0,
+    systemName: 'Domínio',
+  })
 
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -209,7 +214,7 @@ export default function ImportPage() {
   }
 
   const handleCardUploadClick = (step: number) => {
-    if (step === 1 || step === 2) {
+    if (step === 1 || step === 2 || step === 3) {
       fileInputRefs.current[step]?.click()
       return
     }
@@ -234,12 +239,14 @@ export default function ImportPage() {
 
     setIsProcessingLocal(true)
     try {
-      if (step === 2) {
+      if (step === 2 || step === 3) {
         if (!user) throw new Error('Usuário não autenticado')
+        const systemName = step === 2 ? 'Domínio' : 'VELIT'
+        const endpoint = step === 2 ? 'process-balancete-dominio' : 'process-balancete-velit'
 
-        setDominioImportState({ open: true, progress: 10 })
+        setSystemImportState({ open: true, progress: 10, systemName })
         const progressInterval = setInterval(() => {
-          setDominioImportState((prev) => ({
+          setSystemImportState((prev) => ({
             ...prev,
             progress: Math.min(prev.progress + Math.floor(Math.random() * 10) + 5, 90),
           }))
@@ -253,26 +260,23 @@ export default function ImportPage() {
             data: { session },
           } = await supabase.auth.getSession()
 
-          const res = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${session?.access_token}`,
-              },
-              body: formData,
+          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${session?.access_token}`,
             },
-          )
+            body: formData,
+          })
 
           clearInterval(progressInterval)
           const result = await res.json().catch(() => ({}))
 
           if (!res.ok) {
-            throw new Error(result.error || 'Erro ao processar o arquivo Domínio.')
+            throw new Error(result.error || `Erro ao processar o arquivo ${systemName}.`)
           }
 
           if (result.requiresAction) {
-            setDominioImportState({ open: false, progress: 0 })
+            setSystemImportState({ open: false, progress: 0, systemName })
             setPeriodConflictDialog({
               open: true,
               data_inicio: result.data_inicio,
@@ -282,21 +286,22 @@ export default function ImportPage() {
               existing_count: result.existing_count,
               total_count: result.total_count,
               file,
+              step,
             })
             return
           }
 
-          setDominioImportState({ open: true, progress: 100 })
+          setSystemImportState({ open: true, progress: 100, systemName })
 
           await new Promise((resolve) => setTimeout(resolve, 800))
 
-          setDominioImportState({ open: false, progress: 0 })
-          toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+          setSystemImportState({ open: false, progress: 0, systemName })
+          toast.success(`Arquivo ${systemName} importado e processado com sucesso!`)
           await fetchStatus()
           navigate('/conciliacao-balancetes')
         } catch (err) {
           clearInterval(progressInterval)
-          setDominioImportState({ open: false, progress: 0 })
+          setSystemImportState({ open: false, progress: 0, systemName })
           throw err
         }
       } else if (step === 1) {
@@ -377,11 +382,15 @@ export default function ImportPage() {
 
   const handlePeriodAction = async (action: 'REPLACE' | 'APPEND') => {
     if (!periodConflictDialog.file) return
+    const step = periodConflictDialog.step
+    const systemName = step === 3 ? 'VELIT' : 'Domínio'
+    const endpoint = step === 3 ? 'process-balancete-velit' : 'process-balancete-dominio'
+
     setPeriodConflictDialog((prev) => ({ ...prev, open: false }))
-    setDominioImportState({ open: true, progress: 10 })
+    setSystemImportState({ open: true, progress: 10, systemName })
 
     const progressInterval = setInterval(() => {
-      setDominioImportState((prev) => ({
+      setSystemImportState((prev) => ({
         ...prev,
         progress: Math.min(prev.progress + Math.floor(Math.random() * 10) + 5, 90),
       }))
@@ -397,35 +406,32 @@ export default function ImportPage() {
         data: { session },
       } = await supabase.auth.getSession()
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-balancete-dominio`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${session?.access_token}` },
-          body: formData,
-        },
-      )
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+        body: formData,
+      })
 
       clearInterval(progressInterval)
 
       const result = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(result.error || 'Erro ao processar o arquivo Domínio.')
+      if (!res.ok) throw new Error(result.error || `Erro ao processar o arquivo ${systemName}.`)
 
-      setDominioImportState({ open: true, progress: 100 })
+      setSystemImportState((prev) => ({ ...prev, progress: 100 }))
       await new Promise((resolve) => setTimeout(resolve, 800))
-      setDominioImportState({ open: false, progress: 0 })
+      setSystemImportState({ open: false, progress: 0, systemName })
 
       if (result.message) {
         toast.info(result.message)
       } else {
-        toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+        toast.success(`Arquivo ${systemName} importado e processado com sucesso!`)
       }
 
       await fetchStatus()
       navigate('/conciliacao-balancetes')
     } catch (err: any) {
       clearInterval(progressInterval)
-      setDominioImportState({ open: false, progress: 0 })
+      setSystemImportState((prev) => ({ ...prev, open: false, progress: 0 }))
       toast.error('Erro ao importar: ' + err.message)
     }
   }
@@ -820,7 +826,9 @@ export default function ImportPage() {
                   disabled={isBusy}
                 >
                   <UploadCloud className="w-4 h-4 mr-2" />
-                  {hasData && card.step !== 1 && card.step !== 2 ? 'Substituir' : 'Importar'}
+                  {hasData && card.step !== 1 && card.step !== 2 && card.step !== 3
+                    ? 'Substituir'
+                    : 'Importar'}
                 </Button>
                 {hasData && (
                   <Button
@@ -1138,15 +1146,15 @@ export default function ImportPage() {
       </Dialog>
 
       <Dialog
-        open={dominioImportState.open}
+        open={systemImportState.open}
         onOpenChange={(o) => {
-          if (!o && dominioImportState.progress < 100 && dominioImportState.progress > 0) return
-          setDominioImportState((prev) => ({ ...prev, open: o }))
+          if (!o && systemImportState.progress < 100 && systemImportState.progress > 0) return
+          setSystemImportState((prev) => ({ ...prev, open: o }))
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Importando Balancete Domínio</DialogTitle>
+            <DialogTitle>Importando Balancete {systemImportState.systemName}</DialogTitle>
             <DialogDescription>
               Enviando e processando os dados. Isso pode levar alguns segundos...
             </DialogDescription>
@@ -1154,9 +1162,9 @@ export default function ImportPage() {
           <div className="py-6 space-y-4">
             <div className="flex justify-between text-sm font-medium text-slate-700 dark:text-slate-300">
               <span>Progresso de importação</span>
-              <span>{dominioImportState.progress}%</span>
+              <span>{systemImportState.progress}%</span>
             </div>
-            <Progress value={dominioImportState.progress} className="h-2.5" />
+            <Progress value={systemImportState.progress} className="h-2.5" />
           </div>
         </DialogContent>
       </Dialog>
