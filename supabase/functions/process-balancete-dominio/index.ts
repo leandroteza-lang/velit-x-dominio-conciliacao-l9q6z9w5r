@@ -260,6 +260,7 @@ Deno.serve(async (req: Request) => {
       if (data_inicio && data_fim) break
     }
 
+    let existingImportacao = null
     if (data_inicio && data_fim && !action) {
       const { data: existing } = await supabase
         .from('importacoes')
@@ -270,21 +271,11 @@ Deno.serve(async (req: Request) => {
         .single()
 
       if (existing) {
-        return new Response(
-          JSON.stringify({
-            requiresAction: true,
-            data_inicio,
-            data_fim,
-            existing_id: existing.id,
-          }),
-          {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        existingImportacao = existing
       }
     }
 
-    let importacao_id = existing_id
+    let importacao_id = existing_id || existingImportacao?.id
     if (!importacao_id || importacao_id === 'undefined') {
       const { data: newImp, error: impErr } = await supabase
         .from('importacoes')
@@ -374,19 +365,129 @@ Deno.serve(async (req: Request) => {
       throw new Error('Nenhum dado válido encontrado para importar. Verifique o layout do arquivo.')
     }
 
-    if (action === 'REPLACE' || !action) {
-      await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao_id)
+    if (existingImportacao && !action) {
+      let existingRecords: any[] = []
+      let fromIdx = 0
+      const step = 1000
+      let fetchMoreRecs = true
+
+      while (fetchMoreRecs) {
+        const { data: recs, error: recsErr } = await supabase
+          .from('balancete_dominio')
+          .select('codigo, classificacao')
+          .eq('importacao_id', existingImportacao.id)
+          .range(fromIdx, fromIdx + step - 1)
+
+        if (recsErr) throw recsErr
+
+        if (recs && recs.length > 0) {
+          existingRecords = [...existingRecords, ...recs]
+          fromIdx += step
+          if (recs.length < step) fetchMoreRecs = false
+        } else {
+          fetchMoreRecs = false
+        }
+      }
+
+      const existingSet = new Set(
+        existingRecords.map((r) => `${r.codigo || ''}|${r.classificacao || ''}`),
+      )
+
+      let newCount = 0
+      let existingCount = 0
+
+      for (const row of toInsert) {
+        const key = `${row.codigo || ''}|${row.classificacao || ''}`
+        if (existingSet.has(key)) {
+          existingCount++
+        } else {
+          newCount++
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          requiresAction: true,
+          data_inicio,
+          data_fim,
+          existing_id: existingImportacao.id,
+          new_count: newCount,
+          existing_count: existingCount,
+          total_count: toInsert.length,
+        }),
+        {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        },
+      )
     }
 
-    for (let i = 0; i < toInsert.length; i += 1000) {
-      const chunk = toInsert.slice(i, i + 1000)
+    let finalToInsert = toInsert
+
+    if (action === 'REPLACE' || !action) {
+      await supabase.from('balancete_dominio').delete().eq('importacao_id', importacao_id)
+    } else if (action === 'APPEND') {
+      let existingRecords: any[] = []
+      let fromIdx = 0
+      const step = 1000
+      let fetchMoreRecs = true
+
+      while (fetchMoreRecs) {
+        const { data: recs, error: recsErr } = await supabase
+          .from('balancete_dominio')
+          .select('codigo, classificacao')
+          .eq('importacao_id', importacao_id)
+          .range(fromIdx, fromIdx + step - 1)
+
+        if (recsErr) throw recsErr
+
+        if (recs && recs.length > 0) {
+          existingRecords = [...existingRecords, ...recs]
+          fromIdx += step
+          if (recs.length < step) fetchMoreRecs = false
+        } else {
+          fetchMoreRecs = false
+        }
+      }
+
+      const existingSet = new Set(
+        existingRecords.map((r) => `${r.codigo || ''}|${r.classificacao || ''}`),
+      )
+
+      finalToInsert = []
+      for (const row of toInsert) {
+        const key = `${row.codigo || ''}|${row.classificacao || ''}`
+        if (!existingSet.has(key)) {
+          finalToInsert.push(row)
+        }
+      }
+    }
+
+    if (finalToInsert.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          count: 0,
+          importacao_id,
+          message: 'Nenhum registro novo para adicionar.',
+        }),
+        {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        },
+      )
+    }
+
+    for (let i = 0; i < finalToInsert.length; i += 1000) {
+      const chunk = finalToInsert.slice(i, i + 1000)
       const { error } = await supabase.from('balancete_dominio').insert(chunk)
       if (error) throw error
     }
 
-    return new Response(JSON.stringify({ success: true, count: toInsert.length, importacao_id }), {
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    })
+    return new Response(
+      JSON.stringify({ success: true, count: finalToInsert.length, importacao_id }),
+      {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      },
+    )
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 400,

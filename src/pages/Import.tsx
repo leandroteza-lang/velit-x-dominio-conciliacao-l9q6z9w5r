@@ -133,6 +133,9 @@ export default function ImportPage() {
     data_inicio: string
     data_fim: string
     existing_id: string
+    new_count?: number
+    existing_count?: number
+    total_count?: number
     file: File | null
   }>({ open: false, data_inicio: '', data_fim: '', existing_id: '', file: null })
 
@@ -279,6 +282,9 @@ export default function ImportPage() {
               data_inicio: result.data_inicio,
               data_fim: result.data_fim,
               existing_id: result.existing_id,
+              new_count: result.new_count,
+              existing_count: result.existing_count,
+              total_count: result.total_count,
               file,
             })
             return
@@ -413,7 +419,12 @@ export default function ImportPage() {
       await new Promise((resolve) => setTimeout(resolve, 800))
       setDominioImportState({ open: false, progress: 0 })
 
-      toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+      if (result.message) {
+        toast.info(result.message)
+      } else {
+        toast.success(`Arquivo Domínio importado e processado com sucesso!`)
+      }
+
       await fetchStatus()
       navigate('/conciliacao-balancetes')
     } catch (err: any) {
@@ -979,10 +990,40 @@ export default function ImportPage() {
                       timeZone: 'UTC',
                     })}
                 </strong>{' '}
-                já existe no sistema. Como deseja prosseguir?
+                já existe no sistema.
               </DialogDescription>
             </DialogHeader>
+
+            {periodConflictDialog.total_count !== undefined && (
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800 text-sm mt-4">
+                <p className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+                  Resumo da Importação:
+                </p>
+                <ul className="space-y-1.5 text-slate-600 dark:text-slate-400">
+                  <li className="flex justify-between">
+                    <span>Total de registros no arquivo:</span>
+                    <strong className="text-foreground">{periodConflictDialog.total_count}</strong>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Registros já existentes na base:</span>
+                    <strong className="text-amber-600 dark:text-amber-500">
+                      {periodConflictDialog.existing_count}
+                    </strong>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Novos registros a adicionar:</span>
+                    <strong className="text-emerald-600 dark:text-emerald-500">
+                      {periodConflictDialog.new_count}
+                    </strong>
+                  </li>
+                </ul>
+              </div>
+            )}
+
             <div className="flex flex-col gap-3 py-4">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">
+                Como deseja prosseguir?
+              </p>
               <Button
                 variant="outline"
                 className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-amber-200 hover:bg-amber-50 dark:border-amber-900 dark:hover:bg-amber-950/30"
