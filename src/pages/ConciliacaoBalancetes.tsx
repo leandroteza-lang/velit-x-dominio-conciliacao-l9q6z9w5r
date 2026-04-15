@@ -20,7 +20,15 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, Search, ChevronLeft, ChevronRight, FileX } from 'lucide-react'
+import {
+  Loader2,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  FileX,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ConciliacaoRow = {
@@ -69,7 +77,7 @@ export default function ConciliacaoBalancetes() {
   const [currentPage, setCurrentPage] = useState(1)
   const [importacoes, setImportacoes] = useState<any[]>([])
   const [selectedImportId, setSelectedImportId] = useState<string>('')
-  const itemsPerPage = 50
+  const [itemsPerPage, setItemsPerPage] = useState(50)
 
   useEffect(() => {
     const fetchPeriods = async () => {
@@ -425,7 +433,7 @@ export default function ConciliacaoBalancetes() {
                   <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                     Classificação
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 w-full min-w-[150px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 max-w-[200px]">
                     Nome da Conta
                   </TableHead>
 
@@ -478,7 +486,7 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell className="py-0.5 px-1 h-auto border-r border-slate-200/50 dark:border-slate-800/50">
                         <span
-                          className="block truncate max-w-[150px] sm:max-w-[200px]"
+                          className="block truncate max-w-[120px] sm:max-w-[180px]"
                           title={row.nome}
                         >
                           {row.nome}
@@ -592,40 +600,84 @@ export default function ConciliacaoBalancetes() {
           </div>
 
           {filteredData.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 gap-4">
-              <div className="text-sm text-slate-500">
-                Mostrando{' '}
-                <span className="font-medium text-slate-900 dark:text-slate-100">
-                  {(currentPage - 1) * itemsPerPage + 1}
-                </span>{' '}
-                a{' '}
-                <span className="font-medium text-slate-900 dark:text-slate-100">
-                  {Math.min(currentPage * itemsPerPage, filteredData.length)}
-                </span>{' '}
-                de{' '}
-                <span className="font-medium text-slate-900 dark:text-slate-100">
-                  {filteredData.length}
-                </span>{' '}
-                registros
+            <div className="flex flex-col md:flex-row items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 gap-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
+                <div>
+                  Mostrando{' '}
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    {(currentPage - 1) * itemsPerPage + 1}
+                  </span>{' '}
+                  a{' '}
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    {Math.min(currentPage * itemsPerPage, filteredData.length)}
+                  </span>{' '}
+                  de{' '}
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    {filteredData.length}
+                  </span>{' '}
+                  registros
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>Registros por página:</span>
+                  <Select
+                    value={String(itemsPerPage)}
+                    onValueChange={(val) => {
+                      setItemsPerPage(Number(val))
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[80px] h-8 text-xs bg-white dark:bg-slate-950 shadow-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="500">500</SelectItem>
+                      <SelectItem value="1000">1000</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1 sm:gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0 bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors shadow-sm"
+                  title="Primeira Página"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                  className="h-8 px-2 bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors shadow-sm"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+                  <ChevronLeft className="w-4 h-4 sm:mr-1" />{' '}
+                  <span className="hidden sm:inline">Anterior</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
-                  className="bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                  className="h-8 px-2 bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors shadow-sm"
                 >
-                  Próximo <ChevronRight className="w-4 h-4 ml-1" />
+                  <span className="hidden sm:inline">Próximo</span>{' '}
+                  <ChevronRight className="w-4 h-4 sm:ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage >= totalPages}
+                  className="h-8 w-8 p-0 bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors shadow-sm"
+                  title="Última Página"
+                >
+                  <ChevronsRight className="w-4 h-4" />
                 </Button>
               </div>
             </div>
