@@ -12,19 +12,32 @@ const corsHeaders = {
 function parseExcelDate(v: any): string | null {
   if (!v) return null
   if (typeof v === 'number') {
+    // Apenas aceita datas entre 1990 (32874) e 2100 (73050)
+    if (v < 32874 || v > 73050) return null
     const d = new Date(Math.round((v - 25569) * 86400 * 1000))
     if (isNaN(d.getTime())) return null
     return d.toISOString().split('T')[0]
   }
   if (typeof v === 'string') {
     const s = v.trim()
-    const parts = s.split('/')
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`
+
+    // Tenta encontrar uma data no formato DD/MM/YYYY no meio de um texto (ex: "Período: 01/01/2023 a 31/12/2023")
+    const match = s.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+    if (match) {
+      const year = parseInt(match[3], 10)
+      if (year >= 1990 && year <= 2100) {
+        return `${match[3]}-${match[2]}-${match[1]}`
+      }
     }
+
     const partsDash = s.split('-')
     if (partsDash.length === 3) {
-      if (partsDash[0].length === 4) return s.substring(0, 10)
+      if (partsDash[0].length === 4) {
+        const year = parseInt(partsDash[0], 10)
+        if (year >= 1990 && year <= 2100) {
+          return s.substring(0, 10)
+        }
+      }
     }
   }
   return null
@@ -266,19 +279,35 @@ Deno.serve(async (req: Request) => {
     let data_inicio = null
     let data_fim = null
 
-    for (let r = headerRowIdx + 1; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
+    // Scan ONLY rows BEFORE the header for dates, because once data starts, numbers are balances!
+    // Also scan string texts if they contain dates like "01/01/2023 a 31/12/2023"
+    for (let r = 0; r <= headerRowIdx; r++) {
       const row = jsonData[r]
       if (row) {
-        // Try scanning for dates if known columns, or just look for patterns
         for (let c = 0; c < row.length; c++) {
-          const v = parseExcelDate(row[c])
-          if (v) {
-            if (!data_inicio) data_inicio = v
-            else if (!data_fim && v !== data_inicio) data_fim = v
+          const cellValue = row[c]
+          if (!cellValue) continue
+
+          if (typeof cellValue === 'string') {
+            const matches = cellValue.match(/(\d{2})\/(\d{2})\/(\d{4})/g)
+            if (matches) {
+              for (const m of matches) {
+                const parsed = parseExcelDate(m)
+                if (parsed) {
+                  if (!data_inicio) data_inicio = parsed
+                  else if (!data_fim && parsed !== data_inicio) data_fim = parsed
+                }
+              }
+            }
+          } else {
+            const v = parseExcelDate(cellValue)
+            if (v) {
+              if (!data_inicio) data_inicio = v
+              else if (!data_fim && v !== data_inicio) data_fim = v
+            }
           }
         }
       }
-      if (data_inicio && data_fim) break
     }
 
     // Sort dates just in case
