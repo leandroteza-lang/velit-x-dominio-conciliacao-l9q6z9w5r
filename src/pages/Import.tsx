@@ -32,6 +32,15 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PreviewTable } from '@/components/PreviewTable'
 import {
   Table,
@@ -140,6 +149,26 @@ export default function ImportPage() {
     step: number
   }>({ open: false, data_inicio: '', data_fim: '', existing_id: '', file: null, step: 2 })
 
+  const [periodRequestDialog, setPeriodRequestDialog] = useState<{
+    open: boolean
+    file: File | null
+    step: number
+    availableImports: any[]
+    selectedImportId: string
+    manualStartDate: string
+    manualEndDate: string
+    useManual: boolean
+  }>({
+    open: false,
+    file: null,
+    step: 2,
+    availableImports: [],
+    selectedImportId: '',
+    manualStartDate: '',
+    manualEndDate: '',
+    useManual: false,
+  })
+
   const [pcImportDialog, setPcImportDialog] = useState<{
     open: boolean
     data: any | null
@@ -160,6 +189,17 @@ export default function ImportPage() {
     fetchStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  const fetchAvailableImports = async () => {
+    if (!user) return []
+    const { data } = await supabase
+      .from('importacoes')
+      .select('id, data_inicio, data_fim, descricao')
+      .eq('user_id', user.id)
+      .not('data_inicio', 'is', null)
+      .order('created_at', { ascending: false })
+    return data || []
+  }
 
   const fetchStatus = async () => {
     if (!user) return
@@ -275,6 +315,22 @@ export default function ImportPage() {
             throw new Error(result.error || `Erro ao processar o arquivo ${systemName}.`)
           }
 
+          if (result.requiresPeriod) {
+            setSystemImportState({ open: false, progress: 0, systemName })
+            const imports = await fetchAvailableImports()
+            setPeriodRequestDialog({
+              open: true,
+              file,
+              step,
+              availableImports: imports,
+              selectedImportId: imports.length > 0 ? imports[0].id : '',
+              manualStartDate: '',
+              manualEndDate: '',
+              useManual: imports.length === 0,
+            })
+            return
+          }
+
           if (result.requiresAction) {
             setSystemImportState({ open: false, progress: 0, systemName })
             setPeriodConflictDialog({
@@ -377,6 +433,92 @@ export default function ImportPage() {
       if (event.target) {
         event.target.value = ''
       }
+    }
+  }
+
+  const handlePeriodSubmit = async () => {
+    const { file, step, useManual, selectedImportId, manualStartDate, manualEndDate } =
+      periodRequestDialog
+    if (!file) return
+
+    if (useManual && (!manualStartDate || !manualEndDate)) {
+      toast.error('Por favor, informe a data de início e fim.')
+      return
+    }
+
+    if (!useManual && !selectedImportId) {
+      toast.error('Por favor, selecione um período existente ou use a opção manual.')
+      return
+    }
+
+    const systemName = step === 2 ? 'Domínio' : 'VELIT'
+    const endpoint = step === 2 ? 'process-balancete-dominio' : 'process-balancete-velit'
+
+    setPeriodRequestDialog((prev) => ({ ...prev, open: false }))
+    setSystemImportState({ open: true, progress: 10, systemName })
+
+    const progressInterval = setInterval(() => {
+      setSystemImportState((prev) => ({
+        ...prev,
+        progress: Math.min(prev.progress + Math.floor(Math.random() * 10) + 5, 90),
+      }))
+    }, 600)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      if (useManual) {
+        formData.append('data_inicio', manualStartDate)
+        formData.append('data_fim', manualEndDate)
+      } else {
+        formData.append('existing_id', selectedImportId)
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+        body: formData,
+      })
+
+      clearInterval(progressInterval)
+
+      const result = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(result.error || `Erro ao processar o arquivo ${systemName}.`)
+      }
+
+      if (result.requiresAction) {
+        setSystemImportState({ open: false, progress: 0, systemName })
+        setPeriodConflictDialog({
+          open: true,
+          data_inicio: result.data_inicio,
+          data_fim: result.data_fim,
+          existing_id: result.existing_id,
+          new_count: result.new_count,
+          existing_count: result.existing_count,
+          total_count: result.total_count,
+          file,
+          step,
+        })
+        return
+      }
+
+      setSystemImportState({ open: true, progress: 100, systemName })
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      setSystemImportState({ open: false, progress: 0, systemName })
+      toast.success(`Arquivo ${systemName} importado e processado com sucesso!`)
+      await fetchStatus()
+      navigate('/conciliacao-balancetes')
+    } catch (err: any) {
+      clearInterval(progressInterval)
+      setSystemImportState({ open: false, progress: 0, systemName })
+      toast.error('Erro ao importar: ' + err.message)
     }
   }
 
@@ -967,100 +1109,221 @@ export default function ImportPage() {
       </Dialog>
 
       <Dialog
+        open={periodRequestDialog.open}
+        onOpenChange={(o) => !o && setPeriodRequestDialog((prev) => ({ ...prev, open: false }))}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Período não identificado</DialogTitle>
+            <DialogDescription>
+              O sistema não encontrou as datas referentes a este arquivo. Por favor, vincule a uma
+              importação existente ou informe o período manualmente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-6">
+            <RadioGroup
+              value={periodRequestDialog.useManual ? 'manual' : 'existing'}
+              onValueChange={(val) =>
+                setPeriodRequestDialog((prev) => ({ ...prev, useManual: val === 'manual' }))
+              }
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem
+                  value="existing"
+                  id="r-existing"
+                  disabled={periodRequestDialog.availableImports.length === 0}
+                />
+                <Label
+                  htmlFor="r-existing"
+                  className={
+                    periodRequestDialog.availableImports.length === 0 ? 'text-muted-foreground' : ''
+                  }
+                >
+                  Vincular a um período já importado
+                </Label>
+              </div>
+
+              {!periodRequestDialog.useManual &&
+                periodRequestDialog.availableImports.length > 0 && (
+                  <div className="pl-6 pt-2">
+                    <Select
+                      value={periodRequestDialog.selectedImportId}
+                      onValueChange={(val) =>
+                        setPeriodRequestDialog((prev) => ({ ...prev, selectedImportId: val }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione um período" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {periodRequestDialog.availableImports.map((imp) => {
+                          const inicio = imp.data_inicio
+                            ? new Date(imp.data_inicio).toLocaleDateString('pt-BR', {
+                                timeZone: 'UTC',
+                              })
+                            : ''
+                          const fim = imp.data_fim
+                            ? new Date(imp.data_fim).toLocaleDateString('pt-BR', {
+                                timeZone: 'UTC',
+                              })
+                            : ''
+                          return (
+                            <SelectItem key={imp.id} value={imp.id}>
+                              {inicio && fim ? `${inicio} a ${fim}` : 'Período não definido'}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+              <div className="flex items-center space-x-2 pt-4">
+                <RadioGroupItem value="manual" id="r-manual" />
+                <Label htmlFor="r-manual">Informar datas manualmente</Label>
+              </div>
+
+              {periodRequestDialog.useManual && (
+                <div className="pl-6 pt-2 grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data de Início</Label>
+                    <Input
+                      type="date"
+                      value={periodRequestDialog.manualStartDate}
+                      onChange={(e) =>
+                        setPeriodRequestDialog((prev) => ({
+                          ...prev,
+                          manualStartDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data de Fim</Label>
+                    <Input
+                      type="date"
+                      value={periodRequestDialog.manualEndDate}
+                      onChange={(e) =>
+                        setPeriodRequestDialog((prev) => ({
+                          ...prev,
+                          manualEndDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </RadioGroup>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPeriodRequestDialog((prev) => ({ ...prev, open: false }))}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handlePeriodSubmit}>Confirmar e Importar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={periodConflictDialog.open}
+        onOpenChange={(o) => !o && setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Período já importado</DialogTitle>
+            <DialogDescription>
+              Identificamos que o período de{' '}
+              <strong className="text-foreground">
+                {periodConflictDialog.data_inicio &&
+                  new Date(periodConflictDialog.data_inicio).toLocaleDateString('pt-BR', {
+                    timeZone: 'UTC',
+                  })}
+              </strong>{' '}
+              a{' '}
+              <strong className="text-foreground">
+                {periodConflictDialog.data_fim &&
+                  new Date(periodConflictDialog.data_fim).toLocaleDateString('pt-BR', {
+                    timeZone: 'UTC',
+                  })}
+              </strong>{' '}
+              já existe no sistema.
+            </DialogDescription>
+          </DialogHeader>
+
+          {periodConflictDialog.total_count !== undefined && (
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800 text-sm mt-4">
+              <p className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+                Resumo da Importação:
+              </p>
+              <ul className="space-y-1.5 text-slate-600 dark:text-slate-400">
+                <li className="flex justify-between">
+                  <span>Total de registros no arquivo:</span>
+                  <strong className="text-foreground">{periodConflictDialog.total_count}</strong>
+                </li>
+                <li className="flex justify-between">
+                  <span>Registros já existentes na base:</span>
+                  <strong className="text-amber-600 dark:text-amber-500">
+                    {periodConflictDialog.existing_count}
+                  </strong>
+                </li>
+                <li className="flex justify-between">
+                  <span>Novos registros a adicionar:</span>
+                  <strong className="text-emerald-600 dark:text-emerald-500">
+                    {periodConflictDialog.new_count}
+                  </strong>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 py-4">
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">
+              Como deseja prosseguir?
+            </p>
+            <Button
+              variant="outline"
+              className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-amber-200 hover:bg-amber-50 dark:border-amber-900 dark:hover:bg-amber-950/30"
+              onClick={() => handlePeriodAction('REPLACE')}
+            >
+              <span className="font-semibold text-amber-600">Substituir Tudo</span>
+              <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                Remove os dados antigos deste período e insere os novos (ideal para correções).
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-primary/20 hover:bg-primary/5"
+              onClick={() => handlePeriodAction('APPEND')}
+            >
+              <span className="font-semibold text-primary">Adicionar Apenas Novos</span>
+              <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
+                Realiza uma mesclagem, mantendo o que já existe e apenas inserindo registros que
+                ainda não constam na base.
+              </span>
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={pcImportDialog.open}
         onOpenChange={(o) =>
           !pcImportDialog.isProcessing && setPcImportDialog((prev) => ({ ...prev, open: o }))
         }
       >
-        <Dialog
-          open={periodConflictDialog.open}
-          onOpenChange={(o) => !o && setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Período já importado</DialogTitle>
-              <DialogDescription>
-                Identificamos que o período de{' '}
-                <strong className="text-foreground">
-                  {periodConflictDialog.data_inicio &&
-                    new Date(periodConflictDialog.data_inicio).toLocaleDateString('pt-BR', {
-                      timeZone: 'UTC',
-                    })}
-                </strong>{' '}
-                a{' '}
-                <strong className="text-foreground">
-                  {periodConflictDialog.data_fim &&
-                    new Date(periodConflictDialog.data_fim).toLocaleDateString('pt-BR', {
-                      timeZone: 'UTC',
-                    })}
-                </strong>{' '}
-                já existe no sistema.
-              </DialogDescription>
-            </DialogHeader>
-
-            {periodConflictDialog.total_count !== undefined && (
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800 text-sm mt-4">
-                <p className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
-                  Resumo da Importação:
-                </p>
-                <ul className="space-y-1.5 text-slate-600 dark:text-slate-400">
-                  <li className="flex justify-between">
-                    <span>Total de registros no arquivo:</span>
-                    <strong className="text-foreground">{periodConflictDialog.total_count}</strong>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>Registros já existentes na base:</span>
-                    <strong className="text-amber-600 dark:text-amber-500">
-                      {periodConflictDialog.existing_count}
-                    </strong>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>Novos registros a adicionar:</span>
-                    <strong className="text-emerald-600 dark:text-emerald-500">
-                      {periodConflictDialog.new_count}
-                    </strong>
-                  </li>
-                </ul>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 py-4">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">
-                Como deseja prosseguir?
-              </p>
-              <Button
-                variant="outline"
-                className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-amber-200 hover:bg-amber-50 dark:border-amber-900 dark:hover:bg-amber-950/30"
-                onClick={() => handlePeriodAction('REPLACE')}
-              >
-                <span className="font-semibold text-amber-600">Substituir Tudo</span>
-                <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
-                  Remove os dados antigos deste período e insere os novos (ideal para correções).
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="justify-start h-auto py-3 px-4 flex flex-col items-start gap-1 border-primary/20 hover:bg-primary/5"
-                onClick={() => handlePeriodAction('APPEND')}
-              >
-                <span className="font-semibold text-primary">Adicionar Apenas Novos</span>
-                <span className="font-normal text-xs text-muted-foreground whitespace-normal text-left">
-                  Realiza uma mesclagem, mantendo o que já existe e apenas inserindo registros que
-                  ainda não constam na base.
-                </span>
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                onClick={() => setPeriodConflictDialog((prev) => ({ ...prev, open: false }))}
-              >
-                Cancelar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Importação do Plano de Contas</DialogTitle>

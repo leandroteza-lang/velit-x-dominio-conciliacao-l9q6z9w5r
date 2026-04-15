@@ -142,6 +142,8 @@ Deno.serve(async (req: Request) => {
     const file = formData.get('file') as File
     const action = formData.get('action') as string | null
     const existing_id = formData.get('existing_id') as string | null
+    const manual_data_inicio = formData.get('data_inicio') as string | null
+    const manual_data_fim = formData.get('data_fim') as string | null
 
     if (!file) {
       throw new Error('Nenhum arquivo enviado.')
@@ -276,34 +278,36 @@ Deno.serve(async (req: Request) => {
     }
 
     // Find date range if available (Velit may or may not have it)
-    let data_inicio = null
-    let data_fim = null
+    let data_inicio = manual_data_inicio || null
+    let data_fim = manual_data_fim || null
 
-    // Scan ONLY rows BEFORE the header for dates, because once data starts, numbers are balances!
-    // Also scan string texts if they contain dates like "01/01/2023 a 31/12/2023"
-    for (let r = 0; r <= headerRowIdx; r++) {
-      const row = jsonData[r]
-      if (row) {
-        for (let c = 0; c < row.length; c++) {
-          const cellValue = row[c]
-          if (!cellValue) continue
+    if (!existing_id && (!data_inicio || !data_fim)) {
+      // Scan ONLY rows BEFORE the header for dates, because once data starts, numbers are balances!
+      // Also scan string texts if they contain dates like "01/01/2023 a 31/12/2023"
+      for (let r = 0; r <= headerRowIdx; r++) {
+        const row = jsonData[r]
+        if (row) {
+          for (let c = 0; c < row.length; c++) {
+            const cellValue = row[c]
+            if (!cellValue) continue
 
-          if (typeof cellValue === 'string') {
-            const matches = cellValue.match(/(\d{2})\/(\d{2})\/(\d{4})/g)
-            if (matches) {
-              for (const m of matches) {
-                const parsed = parseExcelDate(m)
-                if (parsed) {
-                  if (!data_inicio) data_inicio = parsed
-                  else if (!data_fim && parsed !== data_inicio) data_fim = parsed
+            if (typeof cellValue === 'string') {
+              const matches = cellValue.match(/(\d{2})\/(\d{2})\/(\d{4})/g)
+              if (matches) {
+                for (const m of matches) {
+                  const parsed = parseExcelDate(m)
+                  if (parsed) {
+                    if (!data_inicio) data_inicio = parsed
+                    else if (!data_fim && parsed !== data_inicio) data_fim = parsed
+                  }
                 }
               }
-            }
-          } else {
-            const v = parseExcelDate(cellValue)
-            if (v) {
-              if (!data_inicio) data_inicio = v
-              else if (!data_fim && v !== data_inicio) data_fim = v
+            } else {
+              const v = parseExcelDate(cellValue)
+              if (v) {
+                if (!data_inicio) data_inicio = v
+                else if (!data_fim && v !== data_inicio) data_fim = v
+              }
             }
           }
         }
@@ -317,6 +321,12 @@ Deno.serve(async (req: Request) => {
       data_fim = temp
     }
 
+    if (!existing_id && (!data_inicio || !data_fim)) {
+      return new Response(JSON.stringify({ requiresPeriod: true }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
+    }
+
     let existingImportacao = null
     if (existing_id) {
       const { data: existing } = await supabase
@@ -324,7 +334,11 @@ Deno.serve(async (req: Request) => {
         .select('id, data_inicio, data_fim')
         .eq('id', existing_id)
         .single()
-      if (existing) existingImportacao = existing
+      if (existing) {
+        existingImportacao = existing
+        data_inicio = existing.data_inicio
+        data_fim = existing.data_fim
+      }
     } else if (data_inicio && data_fim && !action) {
       const { data: existing } = await supabase
         .from('importacoes')

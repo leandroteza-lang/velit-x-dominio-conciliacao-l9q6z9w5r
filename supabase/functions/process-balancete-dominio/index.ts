@@ -142,6 +142,8 @@ Deno.serve(async (req: Request) => {
     const file = formData.get('file') as File
     const action = formData.get('action') as string | null
     const existing_id = formData.get('existing_id') as string | null
+    const manual_data_inicio = formData.get('data_inicio') as string | null
+    const manual_data_fim = formData.get('data_fim') as string | null
 
     if (!file) {
       throw new Error('Nenhum arquivo enviado.')
@@ -261,20 +263,45 @@ Deno.serve(async (req: Request) => {
       headerRowIdx = 0
     }
 
-    let data_inicio = null
-    let data_fim = null
+    let data_inicio = manual_data_inicio || null
+    let data_fim = manual_data_fim || null
 
-    for (let r = headerRowIdx + 1; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
-      const row = jsonData[r]
-      if (row) {
-        if (!data_inicio && row[16]) data_inicio = parseExcelDate(row[16])
-        if (!data_fim && row[17]) data_fim = parseExcelDate(row[17])
+    if (!existing_id && (!data_inicio || !data_fim)) {
+      for (let r = headerRowIdx + 1; r < Math.min(jsonData.length, headerRowIdx + 50); r++) {
+        const row = jsonData[r]
+        if (row) {
+          if (!data_inicio && row[16]) data_inicio = parseExcelDate(row[16])
+          if (!data_fim && row[17]) data_fim = parseExcelDate(row[17])
+        }
+        if (data_inicio && data_fim) break
       }
-      if (data_inicio && data_fim) break
+    }
+
+    if (data_inicio && data_fim && new Date(data_inicio) > new Date(data_fim)) {
+      const temp = data_inicio
+      data_inicio = data_fim
+      data_fim = temp
+    }
+
+    if (!existing_id && (!data_inicio || !data_fim)) {
+      return new Response(JSON.stringify({ requiresPeriod: true }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
     }
 
     let existingImportacao = null
-    if (data_inicio && data_fim && !action) {
+    if (existing_id) {
+      const { data: existing } = await supabase
+        .from('importacoes')
+        .select('id, data_inicio, data_fim')
+        .eq('id', existing_id)
+        .single()
+      if (existing) {
+        existingImportacao = existing
+        data_inicio = existing.data_inicio
+        data_fim = existing.data_fim
+      }
+    } else if (data_inicio && data_fim && !action) {
       const { data: existing } = await supabase
         .from('importacoes')
         .select('id, data_inicio, data_fim')
