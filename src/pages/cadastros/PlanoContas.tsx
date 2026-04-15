@@ -624,9 +624,21 @@ export default function PlanoContas() {
   }
 
   const handleBatchUpdate = async () => {
-    if (!batchConfig.prefix || (!batchConfig.tipo && !batchConfig.natureza)) {
-      toast.error('Preencha o prefixo e ao menos um campo para atualizar.')
+    if (!user) return
+
+    if (!batchConfig.tipo && !batchConfig.natureza) {
+      toast.error('Preencha ao menos um campo (Tipo ou Natureza) para atualizar.')
       return
+    }
+
+    if (!batchConfig.prefix) {
+      if (
+        !confirm(
+          'Nenhum prefixo informado. Isso atualizará TODAS as suas contas. Deseja continuar?',
+        )
+      ) {
+        return
+      }
     }
 
     const updates: any = {}
@@ -634,15 +646,18 @@ export default function PlanoContas() {
     if (batchConfig.natureza) updates.natureza = batchConfig.natureza
 
     try {
-      const { error } = await supabase
-        .from('plano_contas')
-        .update(updates)
-        .like('classificacao', `${batchConfig.prefix}%`)
-        .eq('user_id', user?.id)
+      let query = supabase.from('plano_contas').update(updates).eq('user_id', user.id)
+
+      if (batchConfig.prefix) {
+        query = query.like('classificacao', `${batchConfig.prefix}%`)
+      }
+
+      const { error } = await query
 
       if (error) throw error
       toast.success('Contas atualizadas em lote com sucesso!')
       setBatchDialogOpen(false)
+      setBatchConfig({ prefix: '', tipo: '', natureza: '' })
       refreshGlobalData()
     } catch (err: any) {
       toast.error('Erro ao atualizar em lote: ' + err.message)
@@ -768,11 +783,11 @@ export default function PlanoContas() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Classificação Iniciada Em (Ex: 1 ou 1.1)</Label>
+                  <Label>Classificação Iniciada Em (Opcional - Ex: 1 ou 1.1)</Label>
                   <Input
                     value={batchConfig.prefix}
                     onChange={(e) => setBatchConfig({ ...batchConfig, prefix: e.target.value })}
-                    placeholder="Ex: 1"
+                    placeholder="Deixe em branco para atualizar todas"
                   />
                 </div>
                 <div className="space-y-2">
