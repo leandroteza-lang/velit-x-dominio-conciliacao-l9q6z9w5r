@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -199,6 +200,44 @@ export default function ConciliacaoBalancetes() {
     currentPage * itemsPerPage,
   )
 
+  const totaisAnaliticos = useMemo(() => {
+    const classificacoes = new Set(data.map((d) => d.classificacao))
+    const analyticalData = filteredData.filter((row) => {
+      if (!row.classificacao || row.classificacao === '-') return true
+      for (const c of classificacoes) {
+        if (c !== row.classificacao && c.startsWith(row.classificacao + '.')) {
+          return false
+        }
+      }
+      return true
+    })
+
+    return analyticalData.reduce(
+      (acc, row) => ({
+        saldo_anterior_velit: acc.saldo_anterior_velit + row.saldo_anterior_velit,
+        debito_velit: acc.debito_velit + row.debito_velit,
+        credito_velit: acc.credito_velit + row.credito_velit,
+        saldo_atual_velit: acc.saldo_atual_velit + row.saldo_atual_velit,
+        saldo_anterior_dominio: acc.saldo_anterior_dominio + row.saldo_anterior_dominio,
+        debito_dominio: acc.debito_dominio + row.debito_dominio,
+        credito_dominio: acc.credito_dominio + row.credito_dominio,
+        saldo_atual_dominio: acc.saldo_atual_dominio + row.saldo_atual_dominio,
+        diferenca: acc.diferenca + row.diferenca,
+      }),
+      {
+        saldo_anterior_velit: 0,
+        debito_velit: 0,
+        credito_velit: 0,
+        saldo_atual_velit: 0,
+        saldo_anterior_dominio: 0,
+        debito_dominio: 0,
+        credito_dominio: 0,
+        saldo_atual_dominio: 0,
+        diferenca: 0,
+      },
+    )
+  }, [filteredData, data])
+
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, statusFilter])
@@ -296,13 +335,25 @@ export default function ConciliacaoBalancetes() {
                     {importacoes.map((imp) => {
                       let label = ''
                       if (imp.data_inicio && imp.data_fim) {
-                        const start = new Date(imp.data_inicio).toLocaleDateString('pt-BR', {
-                          timeZone: 'UTC',
-                        })
-                        const end = new Date(imp.data_fim).toLocaleDateString('pt-BR', {
-                          timeZone: 'UTC',
-                        })
-                        label = `${start} a ${end}`
+                        const start = new Date(imp.data_inicio)
+                        const end = new Date(imp.data_fim)
+
+                        const startStr = start.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+                        const endStr = end.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+
+                        const diffMonths =
+                          (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+                          (end.getUTCMonth() - start.getUTCMonth()) +
+                          1
+
+                        let suffix = ''
+                        if (diffMonths === 1) suffix = ' (Mensal)'
+                        else if (diffMonths === 2) suffix = ' (Bimestral)'
+                        else if (diffMonths === 3) suffix = ' (Trimestral)'
+                        else if (diffMonths === 6) suffix = ' (Semestral)'
+                        else if (diffMonths === 12) suffix = ' (Anual)'
+
+                        label = `${startStr} a ${endStr}${suffix}`
                       } else {
                         label = `Importação de ${new Date(imp.created_at).toLocaleDateString(
                           'pt-BR',
@@ -490,6 +541,53 @@ export default function ConciliacaoBalancetes() {
                   </TableRow>
                 )}
               </TableBody>
+              {paginatedData.length > 0 && (
+                <TableFooter className="bg-slate-100/80 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={3}
+                      className="text-right py-2 px-2 text-slate-700 dark:text-slate-300"
+                    >
+                      Totais (Contas Analíticas):
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                      {formatCurrency(totaisAnaliticos.saldo_anterior_velit)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                      {formatCurrency(totaisAnaliticos.debito_velit)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                      {formatCurrency(totaisAnaliticos.credito_velit)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-indigo-900 dark:text-indigo-200 bg-indigo-100/50 dark:bg-indigo-900/30">
+                      {formatCurrency(totaisAnaliticos.saldo_atual_velit)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                      {formatCurrency(totaisAnaliticos.saldo_anterior_dominio)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                      {formatCurrency(totaisAnaliticos.debito_dominio)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                      {formatCurrency(totaisAnaliticos.credito_dominio)}
+                    </TableCell>
+                    <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100/50 dark:bg-emerald-900/30">
+                      {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right py-2 px-1',
+                        totaisAnaliticos.diferenca !== 0
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-slate-700 dark:text-slate-300',
+                      )}
+                    >
+                      {formatCurrency(totaisAnaliticos.diferenca)}
+                    </TableCell>
+                    <TableCell className="py-2 px-1"></TableCell>
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           </div>
 

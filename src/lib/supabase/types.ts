@@ -194,18 +194,27 @@ export type Database = {
       importacoes: {
         Row: {
           created_at: string
+          data_fim: string | null
+          data_inicio: string | null
+          descricao: string | null
           id: string
           status: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
           id?: string
           status?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
           id?: string
           status?: string
           user_id?: string
@@ -739,6 +748,9 @@ export const Constants = {
 //   user_id: uuid (not null)
 //   status: text (not null, default: 'PENDING'::text)
 //   created_at: timestamp with time zone (not null, default: now())
+//   data_inicio: date (nullable)
+//   data_fim: date (nullable)
+//   descricao: text (nullable)
 // Table: lancamentos_dominio
 //   id: uuid (not null, default: gen_random_uuid())
 //   importacao_id: uuid (not null)
