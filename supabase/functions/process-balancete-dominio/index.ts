@@ -45,6 +45,37 @@ Deno.serve(async (req: Request) => {
       importacao_id = newImp.id
     }
 
+    // Fetch user's plano_contas to do DE/PARA (with pagination)
+    let planoContasData: any[] = []
+    let from = 0
+    const stepSize = 1000
+    let fetchMore = true
+
+    while (fetchMore) {
+      const { data, error: pcErr } = await supabase
+        .from('plano_contas')
+        .select('codigo, classificacao')
+        .eq('user_id', user.id)
+        .range(from, from + stepSize - 1)
+
+      if (pcErr) throw pcErr
+
+      if (data && data.length > 0) {
+        planoContasData = [...planoContasData, ...data]
+        from += stepSize
+        if (data.length < stepSize) fetchMore = false
+      } else {
+        fetchMore = false
+      }
+    }
+
+    const planoContasMap = new Map<string, string>()
+    for (const pc of planoContasData) {
+      if (pc.codigo && pc.classificacao) {
+        planoContasMap.set(String(pc.codigo).trim(), pc.classificacao)
+      }
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const workbook = XLSX.read(arrayBuffer, { type: 'array' })
     const firstSheetName = workbook.SheetNames[0]
@@ -72,10 +103,15 @@ Deno.serve(async (req: Request) => {
       const row = jsonData[r]
       if (!row || row.length === 0) continue
 
-      const codigo = row[0] ? String(row[0]) : null
-      let classificacao = row[2] ? String(row[2]) : null
+      const codigoRaw = row[0] ? String(row[0]).trim() : null
+      let classificacaoRaw = row[2] ? String(row[2]).trim() : null
 
-      if (mascaraPadrao && classificacao) {
+      let codigo = codigoRaw
+      let classificacao = classificacaoRaw
+
+      if (codigo && planoContasMap.has(codigo)) {
+        classificacao = planoContasMap.get(codigo) || classificacao
+      } else if (mascaraPadrao && classificacao) {
         classificacao = aplicarMascaraAoCodigo(classificacao, mascaraPadrao)
       }
 
@@ -84,13 +120,10 @@ Deno.serve(async (req: Request) => {
       const credito = parseNumeroUniversal(row[6])
       const saldo_atual = parseNumeroUniversal(row[7])
 
-      if (
-        (codigo && String(codigo).trim() !== '') ||
-        (classificacao && String(classificacao).trim() !== '')
-      ) {
+      if ((codigo && codigo !== '') || (classificacao && classificacao !== '')) {
         toInsert.push({
           importacao_id,
-          codigo: codigo ? String(codigo).trim() : null,
+          codigo: codigo || null,
           classificacao,
           saldo_anterior,
           debito,
