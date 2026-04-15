@@ -420,76 +420,76 @@ export default function ConciliacaoBalancetes() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto w-full">
+          <div className="overflow-auto w-full max-h-[calc(100vh-280px)]">
             <Table className="w-full text-[10px] leading-tight table-auto">
-              <TableHeader>
-                <TableRow className="bg-slate-100/50 hover:bg-slate-100/50 dark:bg-slate-800/50 dark:hover:bg-slate-800/50">
+              <TableHeader className="sticky top-0 z-20 shadow-md ring-1 ring-black/5 dark:ring-white/5">
+                <TableRow className="bg-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-800 border-b-0">
                   <TableHead
                     colSpan={3}
-                    className="py-1 px-1 h-auto text-center font-bold border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                    className="py-1 px-1 h-auto text-center font-bold border-r border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                   >
                     Identificação da Conta
                   </TableHead>
                   <TableHead
                     colSpan={4}
-                    className="py-1 px-1 h-auto text-center font-bold bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-900/50"
+                    className="py-1 px-1 h-auto text-center font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-800"
                   >
                     VELIT
                   </TableHead>
                   <TableHead
                     colSpan={4}
-                    className="py-1 px-1 h-auto text-center font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-900/50"
+                    className="py-1 px-1 h-auto text-center font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-800"
                   >
                     DOMÍNIO
                   </TableHead>
                   <TableHead
                     colSpan={2}
-                    className="py-1 px-1 h-auto text-center font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300"
+                    className="py-1 px-1 h-auto text-center font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                   >
                     Análise
                   </TableHead>
                 </TableRow>
-                <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-900/50">
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-900 border-b shadow-sm">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap bg-slate-50 dark:bg-slate-900">
                     Código
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap bg-slate-50 dark:bg-slate-900">
                     Classificação
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 max-w-[200px]">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 max-w-[200px] bg-slate-50 dark:bg-slate-900">
                     Nome da Conta
                   </TableHead>
 
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
                     Saldo Ant.
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
                     Débito
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
                     Crédito
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right whitespace-nowrap border-r border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right whitespace-nowrap border-r border-indigo-200 dark:border-indigo-800 bg-indigo-100 dark:bg-indigo-900">
                     Saldo Atual
                   </TableHead>
 
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
                     Saldo Ant.
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
                     Débito
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
                     Crédito
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right whitespace-nowrap border-r border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right whitespace-nowrap border-r border-emerald-200 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900">
                     Saldo Atual
                   </TableHead>
 
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
                     Diferença
                   </TableHead>
-                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
+                  <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap bg-slate-50 dark:bg-slate-900">
                     Status
                   </TableHead>
                 </TableRow>
@@ -580,41 +580,41 @@ export default function ConciliacaoBalancetes() {
                 )}
               </TableBody>
               {paginatedData.length > 0 && (
-                <TableFooter className="bg-slate-100/80 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700">
+                <TableFooter className="sticky bottom-0 z-20 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                   <TableRow className="hover:bg-transparent">
                     <TableCell
                       colSpan={3}
-                      className="text-right py-2 px-2 text-slate-700 dark:text-slate-300"
+                      className="text-right py-2 px-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900"
                     >
                       Totais (Contas Analíticas):
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
                       {formatCurrency(totaisAnaliticos.saldo_anterior_velit)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
                       {formatCurrency(totaisAnaliticos.debito_velit)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
                       {formatCurrency(totaisAnaliticos.credito_velit)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-indigo-900 dark:text-indigo-200 bg-indigo-100/50 dark:bg-indigo-900/30">
+                    <TableCell className="text-right py-2 px-1 text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900">
                       {formatCurrency(totaisAnaliticos.saldo_atual_velit)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
                       {formatCurrency(totaisAnaliticos.saldo_anterior_dominio)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
                       {formatCurrency(totaisAnaliticos.debito_dominio)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20">
+                    <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
                       {formatCurrency(totaisAnaliticos.credito_dominio)}
                     </TableCell>
-                    <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100/50 dark:bg-emerald-900/30">
+                    <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900">
                       {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right py-2 px-1',
+                        'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
                         totaisAnaliticos.diferenca !== 0
                           ? 'text-red-600 dark:text-red-400'
                           : 'text-slate-700 dark:text-slate-300',
@@ -622,7 +622,7 @@ export default function ConciliacaoBalancetes() {
                     >
                       {formatCurrency(totaisAnaliticos.diferenca)}
                     </TableCell>
-                    <TableCell className="py-2 px-1"></TableCell>
+                    <TableCell className="py-2 px-1 bg-slate-100 dark:bg-slate-900"></TableCell>
                   </TableRow>
                 </TableFooter>
               )}
