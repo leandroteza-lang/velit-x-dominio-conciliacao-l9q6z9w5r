@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Loader2, Search, ChevronLeft, ChevronRight, FileX } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type ConciliacaoRow = {
   id: string
@@ -35,70 +36,13 @@ type ConciliacaoRow = {
   status: string
 }
 
-const getMockData = (): ConciliacaoRow[] => {
-  return [
-    {
-      id: '1',
-      codigo: '1.1.01.01',
-      classificacao: '1.1.1.01.0001',
-      nome: 'Caixa Geral',
-      saldo_anterior_dominio: 15000.0,
-      debito_dominio: 5000.0,
-      credito_dominio: 2000.0,
-      saldo_atual_dominio: 18000.0,
-      saldo_atual_velit: 18000.0,
-      diferenca: 0,
-      status: 'OK',
-    },
-    {
-      id: '2',
-      codigo: '1.1.02.01',
-      classificacao: '1.1.1.02.0001',
-      nome: 'Banco Itaú C/C',
-      saldo_anterior_dominio: 45000.0,
-      debito_dominio: 12000.0,
-      credito_dominio: 8000.0,
-      saldo_atual_dominio: 49000.0,
-      saldo_atual_velit: 48500.0,
-      diferenca: 500.0,
-      status: 'Divergência',
-    },
-    {
-      id: '3',
-      codigo: '2.1.01.01',
-      classificacao: '2.1.1.01.0001',
-      nome: 'Fornecedores Nacionais',
-      saldo_anterior_dominio: -25000.0,
-      debito_dominio: 10000.0,
-      credito_dominio: 15000.0,
-      saldo_atual_dominio: -30000.0,
-      saldo_atual_velit: 0,
-      diferenca: -30000.0,
-      status: 'Sem Conta',
-    },
-    ...Array.from({ length: 30 }).map((_, i) => ({
-      id: `mock-${i + 4}`,
-      codigo: `3.1.01.${String(i).padStart(2, '0')}`,
-      classificacao: `3.1.1.01.${String(i).padStart(4, '0')}`,
-      nome: `Despesa Operacional ${i}`,
-      saldo_anterior_dominio: 0,
-      debito_dominio: 1500 + i * 10,
-      credito_dominio: 0,
-      saldo_atual_dominio: 1500 + i * 10,
-      saldo_atual_velit: 1500 + i * 10,
-      diferenca: 0,
-      status: 'OK',
-    })),
-  ]
-}
-
 export default function ConciliacaoBalancetes() {
   const [data, setData] = useState<ConciliacaoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const itemsPerPage = 50
 
   useEffect(() => {
     const loadData = async () => {
@@ -111,58 +55,75 @@ export default function ConciliacaoBalancetes() {
           .limit(1)
 
         if (!imports || imports.length === 0) {
-          setData(getMockData())
+          setData([])
           setLoading(false)
           return
         }
 
         const importId = imports[0].id
 
-        const [{ data: conciliacoes }, { data: dominios }, { data: planoContas }] =
-          await Promise.all([
-            supabase.from('conciliacao_balancetes').select('*').eq('importacao_id', importId),
-            supabase.from('balancete_dominio').select('*').eq('importacao_id', importId),
-            supabase.from('plano_contas').select('*').eq('importacao_id', importId),
-          ])
+        const [{ data: dominios }, { data: velits }, { data: planoContas }] = await Promise.all([
+          supabase.from('balancete_dominio').select('*').eq('importacao_id', importId),
+          supabase.from('balancete_velit').select('*').eq('importacao_id', importId),
+          supabase.from('plano_contas').select('*'),
+        ])
 
         const dominiosMap = new Map(dominios?.map((d: any) => [d.codigo, d]) || [])
+        const velitsMap = new Map(velits?.map((v: any) => [v.conta_contabil, v]) || [])
         const planoMap = new Map(planoContas?.map((p: any) => [p.codigo, p]) || [])
 
-        const formatStatus = (status: string | null) => {
-          if (!status) return 'Sem Conta'
-          const s = status.toUpperCase()
-          if (s.includes('OK') || s === 'MATCHED') return 'OK'
-          if (s.includes('DIVERG') || s === 'MISMATCH') return 'Divergência'
-          return 'Sem Conta'
-        }
+        const allCodes = new Set<string>()
+        dominios?.forEach((d: any) => {
+          if (d.codigo) allCodes.add(d.codigo)
+        })
+        velits?.forEach((v: any) => {
+          if (v.conta_contabil) allCodes.add(v.conta_contabil)
+        })
 
-        const mergedData: ConciliacaoRow[] = (conciliacoes || []).map((c: any) => {
-          const dominio = dominiosMap.get(c.conta_contabil) || {}
-          const plano = planoMap.get(c.conta_contabil) || {}
+        const mergedData: ConciliacaoRow[] = Array.from(allCodes).map((codigo) => {
+          const dominio = dominiosMap.get(codigo) || {}
+          const velit = velitsMap.get(codigo) || {}
+          const plano = planoMap.get(codigo) || {}
+
+          const saldo_atual_dominio = Number(dominio.saldo_atual) || 0
+          const saldo_atual_velit = Number(velit.saldo_atual) || 0
+          const diferenca = saldo_atual_dominio - saldo_atual_velit
+
+          let status = 'OK'
+          if (!plano.id) {
+            status = 'Sem Conta'
+          } else if (Math.abs(diferenca) > 0.01) {
+            status = 'Divergência'
+          }
+
+          const classificacao = plano.classificacao || dominio.classificacao || '-'
+          const nome = plano.nome || velit.descricao || '-'
 
           return {
-            id: c.id,
-            codigo: c.conta_contabil || '-',
-            classificacao: dominio.classificacao || plano.classificacao || '-',
-            nome: plano.nome || c.descricao || '-',
+            id: codigo,
+            codigo: codigo,
+            classificacao: classificacao,
+            nome: nome,
             saldo_anterior_dominio: Number(dominio.saldo_anterior) || 0,
             debito_dominio: Number(dominio.debito) || 0,
             credito_dominio: Number(dominio.credito) || 0,
-            saldo_atual_dominio: Number(c.saldo_dominio || dominio.saldo_atual) || 0,
-            saldo_atual_velit: Number(c.saldo_velit) || 0,
-            diferenca: Number(c.diferenca) || 0,
-            status: formatStatus(c.status),
+            saldo_atual_dominio: saldo_atual_dominio,
+            saldo_atual_velit: saldo_atual_velit,
+            diferenca: diferenca,
+            status: status,
           }
         })
 
-        if (mergedData.length === 0) {
-          setData(getMockData())
-        } else {
-          setData(mergedData)
-        }
+        mergedData.sort((a, b) => {
+          const cA = a.classificacao !== '-' ? a.classificacao : '999999999'
+          const cB = b.classificacao !== '-' ? b.classificacao : '999999999'
+          return cA.localeCompare(cB)
+        })
+
+        setData(mergedData)
       } catch (err) {
         console.error('Error fetching data:', err)
-        setData(getMockData())
+        setData([])
       }
       setLoading(false)
     }
@@ -213,6 +174,18 @@ export default function ConciliacaoBalancetes() {
         Sem Conta
       </Badge>
     )
+  }
+
+  const getRowStyle = (classificacao: string) => {
+    if (!classificacao || classificacao === '-') return ''
+    const level = classificacao.split('.').length
+    if (level === 1)
+      return 'bg-slate-200/80 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-800 font-bold'
+    if (level === 2)
+      return 'bg-slate-100 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800/60 font-semibold'
+    if (level === 3)
+      return 'bg-slate-50/50 hover:bg-slate-50 dark:bg-slate-900/40 dark:hover:bg-slate-900/40 font-medium'
+    return ''
   }
 
   if (loading) {
@@ -309,29 +282,25 @@ export default function ConciliacaoBalancetes() {
                   paginatedData.map((row) => (
                     <TableRow
                       key={row.id}
-                      className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/50"
+                      className={cn(
+                        'transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/50',
+                        getRowStyle(row.classificacao),
+                      )}
                     >
-                      <TableCell className="font-medium text-slate-700 dark:text-slate-300">
-                        {row.codigo}
-                      </TableCell>
-                      <TableCell className="text-slate-500 dark:text-slate-400">
-                        {row.classificacao}
-                      </TableCell>
+                      <TableCell className="font-medium">{row.codigo}</TableCell>
+                      <TableCell className="opacity-80">{row.classificacao}</TableCell>
                       <TableCell>
-                        <span
-                          className="block truncate max-w-[220px] font-medium text-slate-800 dark:text-slate-200"
-                          title={row.nome}
-                        >
+                        <span className="block truncate max-w-[220px]" title={row.nome}>
                           {row.nome}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap text-slate-600 dark:text-slate-400">
+                      <TableCell className="text-right whitespace-nowrap opacity-80">
                         {formatCurrency(row.saldo_anterior_dominio)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap text-slate-600 dark:text-slate-400">
+                      <TableCell className="text-right whitespace-nowrap opacity-80">
                         {formatCurrency(row.debito_dominio)}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap text-slate-600 dark:text-slate-400">
+                      <TableCell className="text-right whitespace-nowrap opacity-80">
                         {formatCurrency(row.credito_dominio)}
                       </TableCell>
                       <TableCell className="text-right font-medium whitespace-nowrap bg-slate-50/30 dark:bg-slate-900/20">
