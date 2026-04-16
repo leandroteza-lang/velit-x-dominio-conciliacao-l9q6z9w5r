@@ -310,26 +310,26 @@ export default function ConciliacaoBalancetes() {
     )
   }
 
-  const getRowStyle = (classificacao: string, status: string) => {
+  const getRowBaseBg = (classificacao: string, status: string) => {
     if (
       status === 'Divergência' ||
       status === 'Faltando no Velit' ||
       status === 'Faltando no Domínio'
     ) {
-      return 'bg-red-900/90 text-white hover:bg-red-900 border-b-red-950 dark:bg-red-950/80 dark:hover:bg-red-950 font-semibold'
+      return 'bg-red-900/90 text-white group-hover:bg-red-900 border-b border-red-950 dark:bg-red-950/80 dark:group-hover:bg-red-950 font-semibold'
     }
     if (!classificacao || classificacao === '-')
-      return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300'
+      return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/50'
     const level = classificacao.split('.').length
     if (level === 1)
-      return 'bg-indigo-700 text-white hover:bg-indigo-800 border-b-indigo-800 dark:bg-indigo-900 dark:hover:bg-indigo-800/80 font-bold'
+      return 'bg-indigo-700 text-white group-hover:bg-indigo-800 border-b border-indigo-800 dark:bg-indigo-900 dark:group-hover:bg-indigo-800/80 font-bold'
     if (level === 2)
-      return 'bg-indigo-600 text-white hover:bg-indigo-700 border-b-indigo-700 dark:bg-indigo-800 dark:hover:bg-indigo-700/80 font-bold'
+      return 'bg-indigo-600 text-white group-hover:bg-indigo-700 border-b border-indigo-700 dark:bg-indigo-800 dark:group-hover:bg-indigo-700/80 font-bold'
     if (level === 3)
-      return 'bg-blue-500 text-white hover:bg-blue-600 border-b-blue-600 dark:bg-blue-700 dark:hover:bg-blue-600/80 font-semibold'
+      return 'bg-blue-500 text-white group-hover:bg-blue-600 border-b border-blue-600 dark:bg-blue-700 dark:group-hover:bg-blue-600/80 font-semibold'
     if (level === 4)
-      return 'bg-blue-200 text-blue-950 hover:bg-blue-300 border-b-blue-300 dark:bg-blue-900/60 dark:text-blue-100 dark:border-b-blue-800 dark:hover:bg-blue-800/50 font-medium'
-    return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
+      return 'bg-blue-50 text-blue-950 group-hover:bg-blue-100 border-b border-blue-100 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-800 dark:group-hover:bg-blue-900/50 font-medium'
+    return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/50'
   }
 
   const isDarkRow = (classificacao: string) => {
@@ -341,20 +341,26 @@ export default function ConciliacaoBalancetes() {
     val: number,
     status: string,
     classificacao: string,
-    baseClasses: string,
+    baseBg: string,
+    extraClasses: string,
   ) => {
-    return cn(
-      baseClasses,
-      val !== 0
-        ? status === 'Divergência' ||
-          status === 'Faltando no Velit' ||
-          status === 'Faltando no Domínio'
-          ? 'text-white'
-          : isDarkRow(classificacao)
-            ? 'text-red-300'
-            : 'text-red-600 dark:text-red-400'
-        : '',
-    )
+    const isError = val !== 0
+    let textColor = ''
+    if (isError) {
+      if (
+        status === 'Divergência' ||
+        status === 'Faltando no Velit' ||
+        status === 'Faltando no Domínio'
+      ) {
+        textColor = 'text-white'
+      } else if (isDarkRow(classificacao)) {
+        textColor = 'text-red-300'
+      } else {
+        textColor = 'text-red-600 dark:text-red-400'
+      }
+    }
+
+    return cn(baseBg, extraClasses, textColor)
   }
 
   if (loading) {
@@ -379,7 +385,7 @@ export default function ConciliacaoBalancetes() {
         </div>
       </div>
 
-      <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-card">
         <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center flex-wrap">
             <div className="relative w-full sm:max-w-sm">
@@ -459,197 +465,271 @@ export default function ConciliacaoBalancetes() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 bg-transparent">
           <Table
             wrapperClassName="max-h-[calc(100vh-280px)]"
-            className="w-full text-[10px] leading-tight table-auto"
+            className="w-full text-[10px] leading-tight border-separate border-spacing-0 [&_tr]:border-none"
           >
-            <TableHeader className="sticky top-0 z-30 shadow-md ring-1 ring-black/5 dark:ring-white/5">
-              <TableRow className="bg-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-800 border-b-0">
+            <TableHeader className="sticky top-0 z-30">
+              <TableRow className="bg-transparent hover:bg-transparent border-none">
                 <TableHead
                   colSpan={3}
-                  className="py-1 px-1 h-auto text-center font-bold border-r border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-t-xl border-t border-x border-slate-200 dark:border-slate-700"
                 >
                   Identificação da Conta
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={4}
-                  className="py-1 px-1 h-auto text-center font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-800"
+                  className="py-2 px-2 text-center font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 rounded-t-xl border-t border-x border-indigo-200 dark:border-indigo-800/50"
                 >
                   VELIT
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={4}
-                  className="py-1 px-1 h-auto text-center font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-800"
+                  className="py-2 px-2 text-center font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 rounded-t-xl border-t border-x border-emerald-200 dark:border-emerald-800/50"
                 >
                   DOMÍNIO
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={5}
-                  className="py-1 px-1 h-auto text-center font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-t-xl border-t border-x border-slate-200 dark:border-slate-700"
                 >
                   Análise de Diferenças (VELIT - DOMÍNIO)
                 </TableHead>
               </TableRow>
-              <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-900 border-b shadow-sm">
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+
+              <TableRow className="bg-transparent hover:bg-transparent border-none">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700">
                   Código
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   Classificação
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 max-w-[200px] bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700">
                   Nome da Conta
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
-                <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
+
+                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-l border-b border-indigo-200 dark:border-indigo-800/50 text-right">
                   Saldo Ant.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
+                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-200 dark:border-indigo-800/50 text-right">
                   Débito
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
+                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-200 dark:border-indigo-800/50 text-right">
                   Crédito
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right whitespace-nowrap border-r border-indigo-200 dark:border-indigo-800 bg-indigo-100 dark:bg-indigo-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-indigo-900 dark:text-indigo-200 bg-indigo-100/80 dark:bg-indigo-900/40 border-r border-b border-indigo-200 dark:border-indigo-800/50 text-right">
                   Saldo Atual
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
-                <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
+
+                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-l border-b border-emerald-200 dark:border-emerald-800/50 text-right">
                   Saldo Ant.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
+                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800/50 text-right">
                   Débito
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
+                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800/50 text-right">
                   Crédito
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right whitespace-nowrap border-r border-emerald-200 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-emerald-900 dark:text-emerald-200 bg-emerald-100/80 dark:bg-emerald-900/40 border-r border-b border-emerald-200 dark:border-emerald-800/50 text-right">
                   Saldo Atual
                 </TableHead>
-                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
+
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700 text-right">
                   Dif. S. Ant.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
                   Dif. Déb.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
                   Dif. Créd.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
                   Dif. Atual
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700">
+                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700 text-center">
                   Status
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedData.length > 0 ? (
-                paginatedData.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className={cn('transition-colors', getRowStyle(row.classificacao, row.status))}
-                  >
-                    <TableCell className="py-0.5 px-1 h-auto font-medium whitespace-nowrap">
-                      {row.codigo}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto opacity-90 whitespace-nowrap">
-                      {row.classificacao}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto border-r border-slate-200/50 dark:border-slate-800/50">
-                      <span
-                        className="block truncate max-w-[120px] sm:max-w-[180px]"
-                        title={row.nome}
+                paginatedData.map((row) => {
+                  const baseBg = getRowBaseBg(row.classificacao, row.status)
+                  return (
+                    <TableRow
+                      key={row.id}
+                      className="group border-none bg-transparent hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent"
+                    >
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto font-medium whitespace-nowrap border-l transition-colors',
+                          baseBg,
+                        )}
                       >
-                        {row.nome}
-                      </span>
-                    </TableCell>
-                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
+                        {row.codigo}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto opacity-90 whitespace-nowrap transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {row.classificacao}
+                      </TableCell>
+                      <TableCell
+                        className={cn('py-1 px-2 h-auto border-r transition-colors', baseBg)}
+                      >
+                        <span
+                          className="block truncate max-w-[120px] sm:max-w-[180px]"
+                          title={row.nome}
+                        >
+                          {row.nome}
+                        </span>
+                      </TableCell>
 
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
-                      {formatCurrency(row.saldo_anterior_velit)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
-                      {formatCurrency(row.debito_velit)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
-                      {formatCurrency(row.credito_velit)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-indigo-500/20 bg-indigo-500/10">
-                      {formatCurrency(row.saldo_atual_velit)}
-                    </TableCell>
-                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
+                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
 
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
-                      {formatCurrency(row.saldo_anterior_dominio)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
-                      {formatCurrency(row.debito_dominio)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
-                      {formatCurrency(row.credito_dominio)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-emerald-500/20 bg-emerald-500/10">
-                      {formatCurrency(row.saldo_atual_dominio)}
-                    </TableCell>
-                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.saldo_anterior_velit)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.debito_velit)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.credito_velit)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.saldo_atual_velit)}
+                      </TableCell>
 
-                    <TableCell
-                      className={getDiffCellClass(
-                        row.dif_saldo_anterior,
-                        row.status,
-                        row.classificacao,
-                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap border-l border-slate-200/50 dark:border-slate-700/50 bg-slate-50/20 dark:bg-slate-900/20',
-                      )}
-                    >
-                      {formatCurrency(row.dif_saldo_anterior)}
-                    </TableCell>
-                    <TableCell
-                      className={getDiffCellClass(
-                        row.dif_debito,
-                        row.status,
-                        row.classificacao,
-                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
-                      )}
-                    >
-                      {formatCurrency(row.dif_debito)}
-                    </TableCell>
-                    <TableCell
-                      className={getDiffCellClass(
-                        row.dif_credito,
-                        row.status,
-                        row.classificacao,
-                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
-                      )}
-                    >
-                      {formatCurrency(row.dif_credito)}
-                    </TableCell>
-                    <TableCell
-                      className={getDiffCellClass(
-                        row.diferenca,
-                        row.status,
-                        row.classificacao,
-                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
-                      )}
-                    >
-                      {formatCurrency(row.diferenca)}
-                    </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-center whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20 border-l border-slate-200/50 dark:border-slate-700/50">
-                      {getStatusBadge(row.status)}
-                    </TableCell>
-                  </TableRow>
-                ))
+                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
+
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.saldo_anterior_dominio)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.debito_dominio)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.credito_dominio)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {formatCurrency(row.saldo_atual_dominio)}
+                      </TableCell>
+
+                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
+
+                      <TableCell
+                        className={getDiffCellClass(
+                          row.dif_saldo_anterior,
+                          row.status,
+                          row.classificacao,
+                          baseBg,
+                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap border-l transition-colors',
+                        )}
+                      >
+                        {formatCurrency(row.dif_saldo_anterior)}
+                      </TableCell>
+                      <TableCell
+                        className={getDiffCellClass(
+                          row.dif_debito,
+                          row.status,
+                          row.classificacao,
+                          baseBg,
+                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                        )}
+                      >
+                        {formatCurrency(row.dif_debito)}
+                      </TableCell>
+                      <TableCell
+                        className={getDiffCellClass(
+                          row.dif_credito,
+                          row.status,
+                          row.classificacao,
+                          baseBg,
+                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                        )}
+                      >
+                        {formatCurrency(row.dif_credito)}
+                      </TableCell>
+                      <TableCell
+                        className={getDiffCellClass(
+                          row.diferenca,
+                          row.status,
+                          row.classificacao,
+                          baseBg,
+                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                        )}
+                      >
+                        {formatCurrency(row.diferenca)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'py-1 px-2 h-auto text-center whitespace-nowrap border-r transition-colors',
+                          baseBg,
+                        )}
+                      >
+                        {getStatusBadge(row.status)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               ) : (
-                <TableRow>
-                  <TableCell colSpan={19} className="h-32 text-center">
+                <TableRow className="border-none bg-transparent hover:bg-transparent">
+                  <TableCell
+                    colSpan={19}
+                    className="h-32 text-center rounded-b-xl border-x border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
+                  >
                     <div className="flex flex-col items-center justify-center text-slate-500">
                       <FileX className="w-10 h-10 mb-3 opacity-30" />
                       <p className="font-medium">
@@ -661,45 +741,50 @@ export default function ConciliacaoBalancetes() {
               )}
             </TableBody>
             {paginatedData.length > 0 && (
-              <TableFooter className="sticky bottom-0 z-20 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <TableRow className="hover:bg-transparent">
+              <TableFooter className="sticky bottom-0 z-20 bg-transparent border-none">
+                <TableRow className="border-none hover:bg-transparent bg-transparent shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                   <TableCell
                     colSpan={3}
-                    className="text-right py-2 px-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900"
+                    className="text-right py-3 px-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-b-xl border-b border-x border-slate-300 dark:border-slate-700"
                   >
                     Totais (Contas Analíticas):
                   </TableCell>
-                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
-                  <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
+
+                  <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
+
+                  <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 rounded-bl-xl border-b border-l border-indigo-300 dark:border-indigo-800/50">
                     {formatCurrency(totaisAnaliticos.saldo_anterior_velit)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
+                  <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 border-b border-indigo-300 dark:border-indigo-800/50">
                     {formatCurrency(totaisAnaliticos.debito_velit)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
+                  <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 border-b border-indigo-300 dark:border-indigo-800/50">
                     {formatCurrency(totaisAnaliticos.credito_velit)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900">
+                  <TableCell className="text-right py-3 px-2 font-bold text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900/50 rounded-br-xl border-b border-r border-indigo-300 dark:border-indigo-800/50">
                     {formatCurrency(totaisAnaliticos.saldo_atual_velit)}
                   </TableCell>
-                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
-                  <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
+
+                  <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
+
+                  <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 rounded-bl-xl border-b border-l border-emerald-300 dark:border-emerald-800/50">
                     {formatCurrency(totaisAnaliticos.saldo_anterior_dominio)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
+                  <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 border-b border-emerald-300 dark:border-emerald-800/50">
                     {formatCurrency(totaisAnaliticos.debito_dominio)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
+                  <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 border-b border-emerald-300 dark:border-emerald-800/50">
                     {formatCurrency(totaisAnaliticos.credito_dominio)}
                   </TableCell>
-                  <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900">
+                  <TableCell className="text-right py-3 px-2 font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900/50 rounded-br-xl border-b border-r border-emerald-300 dark:border-emerald-800/50">
                     {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
                   </TableCell>
-                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
+
+                  <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
                   <TableCell
                     className={cn(
-                      'text-right py-2 px-1 border-l border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900',
+                      'text-right py-3 px-2 font-bold rounded-bl-xl border-b border-l border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
                       totaisAnaliticos.dif_saldo_anterior !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
@@ -709,7 +794,7 @@ export default function ConciliacaoBalancetes() {
                   </TableCell>
                   <TableCell
                     className={cn(
-                      'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
+                      'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
                       totaisAnaliticos.dif_debito !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
@@ -719,7 +804,7 @@ export default function ConciliacaoBalancetes() {
                   </TableCell>
                   <TableCell
                     className={cn(
-                      'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
+                      'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
                       totaisAnaliticos.dif_credito !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
@@ -729,7 +814,7 @@ export default function ConciliacaoBalancetes() {
                   </TableCell>
                   <TableCell
                     className={cn(
-                      'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
+                      'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
                       totaisAnaliticos.diferenca !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
@@ -737,15 +822,14 @@ export default function ConciliacaoBalancetes() {
                   >
                     {formatCurrency(totaisAnaliticos.diferenca)}
                   </TableCell>
-
-                  <TableCell className="py-2 px-1 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></TableCell>
+                  <TableCell className="py-3 px-2 rounded-br-xl border-b border-r border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80"></TableCell>
                 </TableRow>
               </TableFooter>
             )}
           </Table>
 
           {filteredData.length > 0 && (
-            <div className="flex flex-col md:flex-row items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 gap-4">
+            <div className="flex flex-col md:flex-row items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 gap-4 mt-4">
               <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
                 <div>
                   Mostrando{' '}
