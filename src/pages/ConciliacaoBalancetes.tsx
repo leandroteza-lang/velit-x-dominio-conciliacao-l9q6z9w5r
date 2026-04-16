@@ -389,10 +389,21 @@ export default function ConciliacaoBalancetes() {
     currentPage * itemsPerPage,
   )
 
-  const totaisAnaliticos = useMemo(() => {
-    const analyticalData = filteredData.filter((row) => !row.isSintetica)
+  const totaisDinamicos = useMemo(() => {
+    const visibleClassificacoes = new Set(filteredData.map((d) => d.classificacao))
 
-    return analyticalData.reduce(
+    const visibleLeaves = filteredData.filter((row) => {
+      if (!row.classificacao || row.classificacao === '-') return true
+      const prefix = row.classificacao + '.'
+      for (const c of visibleClassificacoes) {
+        if (c.startsWith(prefix)) {
+          return false
+        }
+      }
+      return true
+    })
+
+    return visibleLeaves.reduce(
       (acc, row) => ({
         saldo_anterior_velit: acc.saldo_anterior_velit + row.saldo_anterior_velit,
         debito_velit: acc.debito_velit + row.debito_velit,
@@ -422,7 +433,7 @@ export default function ConciliacaoBalancetes() {
         diferenca: 0,
       },
     )
-  }, [filteredData, data])
+  }, [filteredData])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -1219,37 +1230,37 @@ export default function ConciliacaoBalancetes() {
                     colSpan={3}
                     className="text-right py-3 px-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-b-xl border-b border-x border-slate-300 dark:border-slate-700"
                   >
-                    Totais (Contas Analíticas):
+                    Totais Dinâmicos (Visíveis):
                   </TableCell>
 
                   <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
                   <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 rounded-bl-xl border-b border-l border-indigo-300 dark:border-indigo-800/50">
-                    {formatCurrency(totaisAnaliticos.saldo_anterior_velit)}
+                    {formatCurrency(totaisDinamicos.saldo_anterior_velit)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 border-b border-indigo-300 dark:border-indigo-800/50">
-                    {formatCurrency(totaisAnaliticos.debito_velit)}
+                    {formatCurrency(totaisDinamicos.debito_velit)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 border-b border-indigo-300 dark:border-indigo-800/50">
-                    {formatCurrency(totaisAnaliticos.credito_velit)}
+                    {formatCurrency(totaisDinamicos.credito_velit)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900/50 rounded-br-xl border-b border-r border-indigo-300 dark:border-indigo-800/50">
-                    {formatCurrency(totaisAnaliticos.saldo_atual_velit)}
+                    {formatCurrency(totaisDinamicos.saldo_atual_velit)}
                   </TableCell>
 
                   <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
                   <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 rounded-bl-xl border-b border-l border-emerald-300 dark:border-emerald-800/50">
-                    {formatCurrency(totaisAnaliticos.saldo_anterior_dominio)}
+                    {formatCurrency(totaisDinamicos.saldo_anterior_dominio)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 border-b border-emerald-300 dark:border-emerald-800/50">
-                    {formatCurrency(totaisAnaliticos.debito_dominio)}
+                    {formatCurrency(totaisDinamicos.debito_dominio)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 border-b border-emerald-300 dark:border-emerald-800/50">
-                    {formatCurrency(totaisAnaliticos.credito_dominio)}
+                    {formatCurrency(totaisDinamicos.credito_dominio)}
                   </TableCell>
                   <TableCell className="text-right py-3 px-2 font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900/50 rounded-br-xl border-b border-r border-emerald-300 dark:border-emerald-800/50">
-                    {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
+                    {formatCurrency(totaisDinamicos.saldo_atual_dominio)}
                   </TableCell>
 
                   <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
@@ -1257,42 +1268,42 @@ export default function ConciliacaoBalancetes() {
                   <TableCell
                     className={cn(
                       'text-right py-3 px-2 font-bold rounded-bl-xl border-b border-l border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
-                      totaisAnaliticos.dif_saldo_anterior !== 0
+                      totaisDinamicos.dif_saldo_anterior !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
                     )}
                   >
-                    {formatCurrency(totaisAnaliticos.dif_saldo_anterior)}
+                    {formatCurrency(totaisDinamicos.dif_saldo_anterior)}
                   </TableCell>
                   <TableCell
                     className={cn(
                       'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
-                      totaisAnaliticos.dif_debito !== 0
+                      totaisDinamicos.dif_debito !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
                     )}
                   >
-                    {formatCurrency(totaisAnaliticos.dif_debito)}
+                    {formatCurrency(totaisDinamicos.dif_debito)}
                   </TableCell>
                   <TableCell
                     className={cn(
                       'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
-                      totaisAnaliticos.dif_credito !== 0
+                      totaisDinamicos.dif_credito !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
                     )}
                   >
-                    {formatCurrency(totaisAnaliticos.dif_credito)}
+                    {formatCurrency(totaisDinamicos.dif_credito)}
                   </TableCell>
                   <TableCell
                     className={cn(
                       'text-right py-3 px-2 font-bold border-b border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80',
-                      totaisAnaliticos.diferenca !== 0
+                      totaisDinamicos.diferenca !== 0
                         ? 'text-red-600 dark:text-red-400'
                         : 'text-slate-700 dark:text-slate-300',
                     )}
                   >
-                    {formatCurrency(totaisAnaliticos.diferenca)}
+                    {formatCurrency(totaisDinamicos.diferenca)}
                   </TableCell>
                   <TableCell className="py-3 px-2 rounded-br-xl border-b border-r border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80"></TableCell>
                 </TableRow>
