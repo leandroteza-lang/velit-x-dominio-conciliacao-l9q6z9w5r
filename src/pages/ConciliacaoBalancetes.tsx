@@ -332,35 +332,33 @@ export default function ConciliacaoBalancetes() {
     return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/50'
   }
 
-  const isDarkRow = (classificacao: string) => {
-    if (!classificacao || classificacao === '-') return false
-    return classificacao.split('.').length <= 3
-  }
+  const getDiffCellClass = (val: number, classificacao: string, extraClasses: string) => {
+    const isError = Math.abs(val) > 0.01
 
-  const getDiffCellClass = (
-    val: number,
-    status: string,
-    classificacao: string,
-    baseBg: string,
-    extraClasses: string,
-  ) => {
-    const isError = val !== 0
-    let textColor = ''
-    if (isError) {
-      if (
-        status === 'Divergência' ||
-        status === 'Faltando no Velit' ||
-        status === 'Faltando no Domínio'
-      ) {
-        textColor = 'text-white'
-      } else if (isDarkRow(classificacao)) {
-        textColor = 'text-red-300'
-      } else {
-        textColor = 'text-red-600 dark:text-red-400'
-      }
+    let fontWeight = ''
+    if (!classificacao || classificacao === '-') {
+      fontWeight = 'font-normal'
+    } else {
+      const level = classificacao.split('.').length
+      if (level === 1) fontWeight = 'font-bold'
+      else if (level === 2) fontWeight = 'font-bold'
+      else if (level === 3) fontWeight = 'font-semibold'
+      else if (level === 4) fontWeight = 'font-medium'
     }
 
-    return cn(baseBg, extraClasses, textColor)
+    let bgColor = ''
+    let borderColor = ''
+    if (isError) {
+      bgColor =
+        'bg-red-900/90 group-hover:bg-red-900 dark:bg-red-950/90 dark:group-hover:bg-red-950'
+      borderColor = 'border-b border-red-950/50'
+    } else {
+      bgColor =
+        'bg-blue-900/90 group-hover:bg-blue-900 dark:bg-blue-950/90 dark:group-hover:bg-blue-950'
+      borderColor = 'border-b border-blue-950/50'
+    }
+
+    return cn(extraClasses, bgColor, 'text-white', fontWeight, borderColor)
   }
 
   if (loading) {
@@ -672,10 +670,8 @@ export default function ConciliacaoBalancetes() {
                       <TableCell
                         className={getDiffCellClass(
                           row.dif_saldo_anterior,
-                          row.status,
                           row.classificacao,
-                          baseBg,
-                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap border-l transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap border-l transition-colors',
                         )}
                       >
                         {formatCurrency(row.dif_saldo_anterior)}
@@ -683,10 +679,8 @@ export default function ConciliacaoBalancetes() {
                       <TableCell
                         className={getDiffCellClass(
                           row.dif_debito,
-                          row.status,
                           row.classificacao,
-                          baseBg,
-                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
                         )}
                       >
                         {formatCurrency(row.dif_debito)}
@@ -694,10 +688,8 @@ export default function ConciliacaoBalancetes() {
                       <TableCell
                         className={getDiffCellClass(
                           row.dif_credito,
-                          row.status,
                           row.classificacao,
-                          baseBg,
-                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
                         )}
                       >
                         {formatCurrency(row.dif_credito)}
@@ -705,10 +697,8 @@ export default function ConciliacaoBalancetes() {
                       <TableCell
                         className={getDiffCellClass(
                           row.diferenca,
-                          row.status,
                           row.classificacao,
-                          baseBg,
-                          'py-1 px-2 h-auto text-right font-bold whitespace-nowrap transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
                         )}
                       >
                         {formatCurrency(row.diferenca)}
