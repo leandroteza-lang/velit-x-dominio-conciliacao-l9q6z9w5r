@@ -472,18 +472,21 @@ export default function ConciliacaoBalancetes() {
                 >
                   Identificação da Conta
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
                 <TableHead
                   colSpan={4}
                   className="py-1 px-1 h-auto text-center font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300 border-r border-indigo-200 dark:border-indigo-800"
                 >
                   VELIT
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
                 <TableHead
                   colSpan={4}
                   className="py-1 px-1 h-auto text-center font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 border-r border-emerald-200 dark:border-emerald-800"
                 >
                   DOMÍNIO
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
                 <TableHead
                   colSpan={5}
                   className="py-1 px-1 h-auto text-center font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
@@ -501,6 +504,7 @@ export default function ConciliacaoBalancetes() {
                 <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 max-w-[200px] bg-slate-50 dark:bg-slate-900">
                   Nome da Conta
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
                 <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-700 dark:text-indigo-300 text-right whitespace-nowrap bg-indigo-50 dark:bg-indigo-950">
                   Saldo Ant.
@@ -514,6 +518,7 @@ export default function ConciliacaoBalancetes() {
                 <TableHead className="py-1 px-1 h-auto font-semibold text-indigo-900 dark:text-indigo-200 text-right whitespace-nowrap border-r border-indigo-200 dark:border-indigo-800 bg-indigo-100 dark:bg-indigo-900">
                   Saldo Atual
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
                 <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-700 dark:text-emerald-300 text-right whitespace-nowrap bg-emerald-50 dark:bg-emerald-950">
                   Saldo Ant.
@@ -527,6 +532,7 @@ export default function ConciliacaoBalancetes() {
                 <TableHead className="py-1 px-1 h-auto font-semibold text-emerald-900 dark:text-emerald-200 text-right whitespace-nowrap border-r border-emerald-200 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900">
                   Saldo Atual
                 </TableHead>
+                <TableHead className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950" />
 
                 <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
                   Dif. S. Ant.
@@ -566,6 +572,7 @@ export default function ConciliacaoBalancetes() {
                         {row.nome}
                       </span>
                     </TableCell>
+                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
 
                     <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-indigo-500/5">
                       {formatCurrency(row.saldo_anterior_velit)}
@@ -579,6 +586,7 @@ export default function ConciliacaoBalancetes() {
                     <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-indigo-500/20 bg-indigo-500/10">
                       {formatCurrency(row.saldo_atual_velit)}
                     </TableCell>
+                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
 
                     <TableCell className="py-0.5 px-1 h-auto text-right whitespace-nowrap opacity-90 bg-emerald-500/5">
                       {formatCurrency(row.saldo_anterior_dominio)}
@@ -592,6 +600,7 @@ export default function ConciliacaoBalancetes() {
                     <TableCell className="py-0.5 px-1 h-auto text-right font-medium whitespace-nowrap border-r border-emerald-500/20 bg-emerald-500/10">
                       {formatCurrency(row.saldo_atual_dominio)}
                     </TableCell>
+                    <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
 
                     <TableCell
                       className={getDiffCellClass(
@@ -640,7 +649,7 @@ export default function ConciliacaoBalancetes() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={16} className="h-32 text-center">
+                  <TableCell colSpan={19} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-500">
                       <FileX className="w-10 h-10 mb-3 opacity-30" />
                       <p className="font-medium">
@@ -660,6 +669,7 @@ export default function ConciliacaoBalancetes() {
                   >
                     Totais (Contas Analíticas):
                   </TableCell>
+                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
                   <TableCell className="text-right py-2 px-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950">
                     {formatCurrency(totaisAnaliticos.saldo_anterior_velit)}
                   </TableCell>
@@ -672,6 +682,7 @@ export default function ConciliacaoBalancetes() {
                   <TableCell className="text-right py-2 px-1 text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900">
                     {formatCurrency(totaisAnaliticos.saldo_atual_velit)}
                   </TableCell>
+                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
                   <TableCell className="text-right py-2 px-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950">
                     {formatCurrency(totaisAnaliticos.saldo_anterior_dominio)}
                   </TableCell>
@@ -684,6 +695,7 @@ export default function ConciliacaoBalancetes() {
                   <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900">
                     {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
                   </TableCell>
+                  <TableCell className="min-w-[8px] sm:min-w-[16px] p-0 !bg-white dark:!bg-slate-950 !border-white dark:!border-slate-950 relative z-10" />
 
                   <TableCell
                     className={cn(
