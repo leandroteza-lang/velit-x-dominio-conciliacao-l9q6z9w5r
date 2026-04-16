@@ -77,6 +77,7 @@ export default function ConciliacaoBalancetes() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [accountTypeFilter, setAccountTypeFilter] = useState('ALL')
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
   const [importacoes, setImportacoes] = useState<any[]>([])
@@ -214,16 +215,48 @@ export default function ConciliacaoBalancetes() {
     loadData()
   }, [selectedImportId])
 
+  const dataWithTypes = useMemo(() => {
+    const classificacoes = new Set(data.map((d) => d.classificacao))
+    return data.map((item) => {
+      let isSintetica = false
+      if (item.classificacao && item.classificacao !== '-') {
+        for (const c of classificacoes) {
+          if (c !== item.classificacao && c.startsWith(item.classificacao + '.')) {
+            isSintetica = true
+            break
+          }
+        }
+      }
+      return { ...item, isSintetica }
+    })
+  }, [data])
+
   const filteredData = useMemo(() => {
-    return data.filter((item) => {
+    return dataWithTypes.filter((item) => {
       const searchLower = searchTerm.toLowerCase()
       const matchSearch =
         item.codigo.toLowerCase().includes(searchLower) ||
         item.nome.toLowerCase().includes(searchLower)
       const matchStatus = statusFilter === 'ALL' || item.status === statusFilter
-      return matchSearch && matchStatus
+
+      let matchType = true
+      if (accountTypeFilter !== 'ALL') {
+        if (!item.classificacao || item.classificacao === '-') {
+          matchType = false
+        } else {
+          const c = item.classificacao
+          if (accountTypeFilter === 'ATIVO') matchType = c.startsWith('1')
+          else if (accountTypeFilter === 'PASSIVO') matchType = c.startsWith('2')
+          else if (accountTypeFilter === 'RECEITA') matchType = c.startsWith('3')
+          else if (accountTypeFilter === 'DESPESA') matchType = c.startsWith('4')
+          else if (accountTypeFilter === 'ANALITICA') matchType = !item.isSintetica
+          else if (accountTypeFilter === 'SINTETICA') matchType = item.isSintetica
+        }
+      }
+
+      return matchSearch && matchStatus && matchType
     })
-  }, [data, searchTerm, statusFilter])
+  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilter])
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
   const paginatedData = filteredData.slice(
@@ -232,16 +265,7 @@ export default function ConciliacaoBalancetes() {
   )
 
   const totaisAnaliticos = useMemo(() => {
-    const classificacoes = new Set(data.map((d) => d.classificacao))
-    const analyticalData = filteredData.filter((row) => {
-      if (!row.classificacao || row.classificacao === '-') return true
-      for (const c of classificacoes) {
-        if (c !== row.classificacao && c.startsWith(row.classificacao + '.')) {
-          return false
-        }
-      }
-      return true
-    })
+    const analyticalData = filteredData.filter((row) => !row.isSintetica)
 
     return analyticalData.reduce(
       (acc, row) => ({
@@ -277,7 +301,7 @@ export default function ConciliacaoBalancetes() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter])
+  }, [searchTerm, statusFilter, accountTypeFilter])
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -449,11 +473,29 @@ export default function ConciliacaoBalancetes() {
               </div>
 
               <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Tipo:</span>
+                <Select value={accountTypeFilter} onValueChange={setAccountTypeFilter}>
+                  <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-950 shadow-sm">
+                    <SelectValue placeholder="Todos os Tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos os Tipos</SelectItem>
+                    <SelectItem value="ATIVO">Contas de Ativo (1)</SelectItem>
+                    <SelectItem value="PASSIVO">Contas de Passivo (2)</SelectItem>
+                    <SelectItem value="RECEITA">Contas de Receita (3)</SelectItem>
+                    <SelectItem value="DESPESA">Contas de Despesa (4)</SelectItem>
+                    <SelectItem value="ANALITICA">Contas Analíticas</SelectItem>
+                    <SelectItem value="SINTETICA">Contas Sintéticas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
                 <span className="text-sm font-medium text-slate-500 whitespace-nowrap">
-                  Filtrar Status:
+                  Status:
                 </span>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-slate-950 shadow-sm">
+                  <SelectTrigger className="w-full sm:w-[150px] bg-white dark:bg-slate-950 shadow-sm">
                     <SelectValue placeholder="Todos os Status" />
                   </SelectTrigger>
                   <SelectContent>
