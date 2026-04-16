@@ -311,79 +311,39 @@ export default function ConciliacaoBalancetes() {
     )
   }
 
-  const getRowBaseBg = (classificacao: string, status: string, isSelected: boolean) => {
-    let bg = ''
-
+  const getRowBaseBg = (classificacao: string, status: string) => {
     if (
       status === 'Divergência' ||
       status === 'Faltando no Velit' ||
       status === 'Faltando no Domínio'
     ) {
-      bg =
-        'text-white border-b border-red-950 font-semibold ' +
-        (isSelected
-          ? 'bg-red-700 dark:bg-red-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-          : 'bg-red-900/90 dark:bg-red-950/80 group-hover:bg-red-800 dark:group-hover:bg-red-900')
-      return bg
+      return 'text-white border-b border-red-950/50 font-semibold bg-red-900/90 dark:bg-red-950/90'
     }
 
     if (!classificacao || classificacao === '-') {
-      bg =
-        'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 ' +
-        (isSelected
-          ? 'bg-slate-100 dark:bg-slate-800 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]'
-          : 'bg-white dark:bg-slate-950 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/70')
-      return bg
+      return 'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
     }
 
     const level = classificacao.split('.').length
     if (level === 1) {
-      bg =
-        'text-white border-b border-indigo-800 dark:border-indigo-700 font-bold ' +
-        (isSelected
-          ? 'bg-indigo-500 dark:bg-indigo-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-          : 'bg-indigo-700 dark:bg-indigo-900 group-hover:bg-indigo-600 dark:group-hover:bg-indigo-800')
+      return 'text-white border-b border-indigo-800/50 dark:border-indigo-700/50 font-bold bg-indigo-700 dark:bg-indigo-900'
     } else if (level === 2) {
-      bg =
-        'text-white border-b border-indigo-700 dark:border-indigo-600 font-bold ' +
-        (isSelected
-          ? 'bg-indigo-400 dark:bg-indigo-500 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-          : 'bg-indigo-600 dark:bg-indigo-800 group-hover:bg-indigo-500 dark:group-hover:bg-indigo-700')
+      return 'text-white border-b border-indigo-700/50 dark:border-indigo-600/50 font-bold bg-indigo-600 dark:bg-indigo-800'
     } else if (level === 3) {
-      bg =
-        'text-white border-b border-blue-600 dark:border-blue-500 font-semibold ' +
-        (isSelected
-          ? 'bg-blue-400 dark:bg-blue-500 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-          : 'bg-blue-500 dark:bg-blue-700 group-hover:bg-blue-400 dark:group-hover:bg-blue-600')
+      return 'text-white border-b border-blue-600/50 dark:border-blue-500/50 font-semibold bg-blue-500 dark:bg-blue-700'
     } else if (level === 4) {
-      bg =
-        'border-b border-blue-100 dark:border-blue-800 font-medium ' +
-        (isSelected
-          ? 'bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-100 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
-          : 'bg-blue-50 text-blue-950 dark:bg-blue-900/30 dark:text-blue-100 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60')
+      return 'border-b border-blue-200 dark:border-blue-800/50 font-medium bg-blue-50 text-blue-950 dark:bg-blue-900/40 dark:text-blue-100'
     } else {
-      bg =
-        'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 ' +
-        (isSelected
-          ? 'bg-slate-100 dark:bg-slate-800 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]'
-          : 'bg-white dark:bg-slate-950 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/70')
+      return 'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
     }
-
-    return bg
   }
 
-  const getDiffCellClass = (
-    val: number,
-    classificacao: string,
-    extraClasses: string,
-    isSelected: boolean,
-  ) => {
+  const getDiffCellClass = (val: number, classificacao: string, extraClasses: string) => {
     const isError = Math.abs(val) > 0.01
 
     let fontWeight = ''
-    if (!classificacao || classificacao === '-') {
-      fontWeight = 'font-normal'
-    } else {
+    if (!classificacao || classificacao === '-') fontWeight = 'font-normal'
+    else {
       const level = classificacao.split('.').length
       if (level === 1) fontWeight = 'font-bold'
       else if (level === 2) fontWeight = 'font-bold'
@@ -391,22 +351,20 @@ export default function ConciliacaoBalancetes() {
       else if (level === 4) fontWeight = 'font-medium'
     }
 
-    let bgColor = ''
-    let borderColor = ''
-    if (isError) {
-      bgColor = isSelected
-        ? 'bg-red-700 dark:bg-red-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-        : 'bg-red-900/90 dark:bg-red-950/90 group-hover:bg-red-800 dark:group-hover:bg-red-900'
-      borderColor = 'border-b border-red-950/50 dark:border-red-900/50'
-    } else {
-      bgColor = isSelected
-        ? 'bg-blue-800 dark:bg-blue-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
-        : 'bg-blue-900/90 dark:bg-blue-950/90 group-hover:bg-blue-800 dark:group-hover:bg-blue-900'
-      borderColor = 'border-b border-blue-950/50 dark:border-blue-900/50'
-    }
+    let bgColor = isError
+      ? 'bg-red-900/90 dark:bg-red-950/90'
+      : 'bg-blue-900/90 dark:bg-blue-950/90'
+    let borderColor = isError
+      ? 'border-b border-red-950/50 dark:border-red-900/50'
+      : 'border-b border-blue-950/50 dark:border-blue-900/50'
 
     return cn(extraClasses, bgColor, 'text-white', fontWeight, borderColor)
   }
+
+  const focusRowHover =
+    'hover:[&>td]:shadow-[inset_0_1px_0_#64748b,inset_0_-1px_0_#64748b] dark:hover:[&>td]:shadow-[inset_0_1px_0_#94a3b8,inset_0_-1px_0_#94a3b8] hover:[&>td:first-child]:shadow-[inset_3px_0_0_#64748b,inset_0_1px_0_#64748b,inset_0_-1px_0_#64748b] dark:hover:[&>td:first-child]:shadow-[inset_3px_0_0_#94a3b8,inset_0_1px_0_#94a3b8,inset_0_-1px_0_#94a3b8] hover:[&>td:last-child]:shadow-[inset_-3px_0_0_#64748b,inset_0_1px_0_#64748b,inset_0_-1px_0_#64748b] dark:hover:[&>td:last-child]:shadow-[inset_-3px_0_0_#94a3b8,inset_0_1px_0_#94a3b8,inset_0_-1px_0_#94a3b8] hover:[&>td:not(.spacer)]:brightness-95 dark:hover:[&>td:not(.spacer)]:brightness-110 relative hover:z-10'
+  const focusRowSelected =
+    '[&>td]:shadow-[inset_0_2px_0_#fbbf24,inset_0_-2px_0_#fbbf24] [&>td:first-child]:shadow-[inset_4px_0_0_#fbbf24,inset_0_2px_0_#fbbf24,inset_0_-2px_0_#fbbf24] [&>td:last-child]:shadow-[inset_-4px_0_0_#fbbf24,inset_0_2px_0_#fbbf24,inset_0_-2px_0_#fbbf24] [&>td:not(.spacer)]:brightness-90 dark:[&>td:not(.spacer)]:brightness-125 relative z-20'
 
   if (loading) {
     return (
@@ -610,39 +568,37 @@ export default function ConciliacaoBalancetes() {
               {paginatedData.length > 0 ? (
                 paginatedData.map((row) => {
                   const isSelected = row.id === selectedRowId
-                  const baseBg = getRowBaseBg(row.classificacao, row.status, isSelected)
+                  const baseBg = getRowBaseBg(row.classificacao, row.status)
                   return (
                     <TableRow
                       key={row.id}
                       onClick={() => setSelectedRowId(isSelected ? null : row.id)}
                       className={cn(
-                        'group cursor-pointer border-none bg-transparent hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent transition-all duration-200',
-                        isSelected
-                          ? 'relative z-10 shadow-[0_0_15px_rgba(0,0,0,0.15)] dark:shadow-[0_0_15px_rgba(0,0,0,0.5)] ring-1 ring-amber-500/50'
-                          : '',
+                        'group cursor-pointer border-none bg-transparent transition-all duration-100',
+                        isSelected ? focusRowSelected : focusRowHover,
                       )}
                     >
                       <TableCell
                         className={cn(
-                          'py-1 h-auto font-medium whitespace-nowrap transition-colors',
+                          'py-1 px-2 h-auto font-medium whitespace-nowrap transition-all duration-100 border-l border-l-transparent',
                           baseBg,
-                          isSelected
-                            ? 'border-l-4 border-l-amber-500 pl-1 pr-2'
-                            : 'border-l border-l-transparent px-2',
                         )}
                       >
                         {row.codigo}
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto opacity-90 whitespace-nowrap transition-colors',
+                          'py-1 px-2 h-auto opacity-90 whitespace-nowrap transition-all duration-100',
                           baseBg,
                         )}
                       >
                         {row.classificacao}
                       </TableCell>
                       <TableCell
-                        className={cn('py-1 px-2 h-auto border-r transition-colors', baseBg)}
+                        className={cn(
+                          'py-1 px-2 h-auto border-r border-slate-200/20 transition-all duration-100',
+                          baseBg,
+                        )}
                       >
                         <span
                           className="block truncate max-w-[120px] sm:max-w-[180px]"
@@ -652,11 +608,11 @@ export default function ConciliacaoBalancetes() {
                         </span>
                       </TableCell>
 
-                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
+                      <TableCell className="spacer w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none transition-all duration-100" />
 
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l border-slate-200/20 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -664,7 +620,7 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -672,7 +628,7 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -680,18 +636,18 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r transition-colors',
+                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r border-slate-200/20 transition-all duration-100',
                           baseBg,
                         )}
                       >
                         {formatCurrency(row.saldo_atual_velit)}
                       </TableCell>
 
-                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
+                      <TableCell className="spacer w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none transition-all duration-100" />
 
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 border-l border-slate-200/20 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -699,7 +655,7 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -707,7 +663,7 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-colors',
+                          'py-1 px-2 h-auto text-right whitespace-nowrap opacity-90 transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -715,21 +671,20 @@ export default function ConciliacaoBalancetes() {
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r transition-colors',
+                          'py-1 px-2 h-auto text-right font-medium whitespace-nowrap border-r border-slate-200/20 transition-all duration-100',
                           baseBg,
                         )}
                       >
                         {formatCurrency(row.saldo_atual_dominio)}
                       </TableCell>
 
-                      <TableCell className="w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none shadow-none" />
+                      <TableCell className="spacer w-3 min-w-[12px] max-w-[12px] p-0 bg-transparent border-none transition-all duration-100" />
 
                       <TableCell
                         className={getDiffCellClass(
                           row.dif_saldo_anterior,
                           row.classificacao,
-                          'py-1 px-2 h-auto text-right whitespace-nowrap border-l transition-colors',
-                          isSelected,
+                          'py-1 px-2 h-auto text-right whitespace-nowrap border-l border-slate-200/20 transition-all duration-100',
                         )}
                       >
                         {formatCurrency(row.dif_saldo_anterior)}
@@ -738,8 +693,7 @@ export default function ConciliacaoBalancetes() {
                         className={getDiffCellClass(
                           row.dif_debito,
                           row.classificacao,
-                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
-                          isSelected,
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-all duration-100',
                         )}
                       >
                         {formatCurrency(row.dif_debito)}
@@ -748,8 +702,7 @@ export default function ConciliacaoBalancetes() {
                         className={getDiffCellClass(
                           row.dif_credito,
                           row.classificacao,
-                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
-                          isSelected,
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-all duration-100',
                         )}
                       >
                         {formatCurrency(row.dif_credito)}
@@ -758,15 +711,14 @@ export default function ConciliacaoBalancetes() {
                         className={getDiffCellClass(
                           row.diferenca,
                           row.classificacao,
-                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
-                          isSelected,
+                          'py-1 px-2 h-auto text-right whitespace-nowrap transition-all duration-100',
                         )}
                       >
                         {formatCurrency(row.diferenca)}
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto text-center whitespace-nowrap border-r transition-colors',
+                          'py-1 px-2 h-auto text-center whitespace-nowrap border-r border-r-transparent transition-all duration-100',
                           baseBg,
                         )}
                       >
@@ -792,7 +744,7 @@ export default function ConciliacaoBalancetes() {
               )}
             </TableBody>
             {paginatedData.length > 0 && (
-              <TableFooter className="sticky bottom-0 z-20 bg-transparent border-none">
+              <TableFooter className="sticky bottom-0 z-30 bg-transparent border-none">
                 <TableRow className="border-none hover:bg-transparent bg-transparent shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                   <TableCell
                     colSpan={3}
