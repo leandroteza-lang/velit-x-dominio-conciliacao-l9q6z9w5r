@@ -21,6 +21,14 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Loader2,
   Search,
   ChevronLeft,
@@ -28,6 +36,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FileX,
+  Filter,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -77,7 +86,7 @@ export default function ConciliacaoBalancetes() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [accountTypeFilter, setAccountTypeFilter] = useState('ALL')
+  const [accountTypeFilters, setAccountTypeFilters] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
   const [importacoes, setImportacoes] = useState<any[]>([])
@@ -240,23 +249,44 @@ export default function ConciliacaoBalancetes() {
       const matchStatus = statusFilter === 'ALL' || item.status === statusFilter
 
       let matchType = true
-      if (accountTypeFilter !== 'ALL') {
+      if (accountTypeFilters.length > 0) {
         if (!item.classificacao || item.classificacao === '-') {
           matchType = false
         } else {
-          const c = item.classificacao
-          if (accountTypeFilter === 'ATIVO') matchType = c.startsWith('1')
-          else if (accountTypeFilter === 'PASSIVO') matchType = c.startsWith('2')
-          else if (accountTypeFilter === 'RECEITA') matchType = c.startsWith('3')
-          else if (accountTypeFilter === 'DESPESA') matchType = c.startsWith('4')
-          else if (accountTypeFilter === 'ANALITICA') matchType = !item.isSintetica
-          else if (accountTypeFilter === 'SINTETICA') matchType = item.isSintetica
+          const natures = accountTypeFilters.filter((f) =>
+            ['ATIVO', 'PASSIVO', 'RECEITA', 'DESPESA'].includes(f),
+          )
+          const structures = accountTypeFilters.filter((f) =>
+            ['ANALITICA', 'SINTETICA'].includes(f),
+          )
+
+          let matchNature = true
+          if (natures.length > 0) {
+            matchNature = natures.some((n) => {
+              if (n === 'ATIVO') return item.classificacao.startsWith('1')
+              if (n === 'PASSIVO') return item.classificacao.startsWith('2')
+              if (n === 'RECEITA') return item.classificacao.startsWith('3')
+              if (n === 'DESPESA') return item.classificacao.startsWith('4')
+              return false
+            })
+          }
+
+          let matchStructure = true
+          if (structures.length > 0) {
+            matchStructure = structures.some((s) => {
+              if (s === 'ANALITICA') return !item.isSintetica
+              if (s === 'SINTETICA') return item.isSintetica
+              return false
+            })
+          }
+
+          matchType = matchNature && matchStructure
         }
       }
 
       return matchSearch && matchStatus && matchType
     })
-  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilter])
+  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilters])
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
   const paginatedData = filteredData.slice(
@@ -301,7 +331,7 @@ export default function ConciliacaoBalancetes() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, accountTypeFilter])
+  }, [searchTerm, statusFilter, accountTypeFilters])
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -474,20 +504,86 @@ export default function ConciliacaoBalancetes() {
 
               <div className="flex items-center gap-2 flex-1 sm:flex-none">
                 <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Tipo:</span>
-                <Select value={accountTypeFilter} onValueChange={setAccountTypeFilter}>
-                  <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-950 shadow-sm">
-                    <SelectValue placeholder="Todos os Tipos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Todos os Tipos</SelectItem>
-                    <SelectItem value="ATIVO">Contas de Ativo (1)</SelectItem>
-                    <SelectItem value="PASSIVO">Contas de Passivo (2)</SelectItem>
-                    <SelectItem value="RECEITA">Contas de Receita (3)</SelectItem>
-                    <SelectItem value="DESPESA">Contas de Despesa (4)</SelectItem>
-                    <SelectItem value="ANALITICA">Contas Analíticas</SelectItem>
-                    <SelectItem value="SINTETICA">Contas Sintéticas</SelectItem>
-                  </SelectContent>
-                </Select>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-[160px] justify-between bg-white dark:bg-slate-950 shadow-sm font-normal px-3"
+                    >
+                      <span className="truncate">
+                        {accountTypeFilters.length === 0
+                          ? 'Todos os Tipos'
+                          : `${accountTypeFilters.length} selecionado(s)`}
+                      </span>
+                      <Filter className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="start">
+                    <DropdownMenuLabel>Natureza da Conta</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('ATIVO')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'ATIVO'] : prev.filter((f) => f !== 'ATIVO'),
+                        )
+                      }}
+                    >
+                      Contas de Ativo (1)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('PASSIVO')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'PASSIVO'] : prev.filter((f) => f !== 'PASSIVO'),
+                        )
+                      }}
+                    >
+                      Contas de Passivo (2)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('RECEITA')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'RECEITA'] : prev.filter((f) => f !== 'RECEITA'),
+                        )
+                      }}
+                    >
+                      Contas de Receita (3)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('DESPESA')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'DESPESA'] : prev.filter((f) => f !== 'DESPESA'),
+                        )
+                      }}
+                    >
+                      Contas de Despesa (4)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Estrutura Contábil</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('ANALITICA')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'ANALITICA'] : prev.filter((f) => f !== 'ANALITICA'),
+                        )
+                      }}
+                    >
+                      Contas Analíticas
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={accountTypeFilters.includes('SINTETICA')}
+                      onCheckedChange={(checked) => {
+                        setAccountTypeFilters((prev) =>
+                          checked ? [...prev, 'SINTETICA'] : prev.filter((f) => f !== 'SINTETICA'),
+                        )
+                      }}
+                    >
+                      Contas Sintéticas
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="flex items-center gap-2 flex-1 sm:flex-none">
