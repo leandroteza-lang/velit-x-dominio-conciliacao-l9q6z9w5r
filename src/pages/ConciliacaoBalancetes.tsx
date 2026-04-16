@@ -78,6 +78,7 @@ export default function ConciliacaoBalancetes() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [currentPage, setCurrentPage] = useState(1)
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
   const [importacoes, setImportacoes] = useState<any[]>([])
   const [selectedImportId, setSelectedImportId] = useState<string>('')
   const [itemsPerPage, setItemsPerPage] = useState(50)
@@ -310,29 +311,73 @@ export default function ConciliacaoBalancetes() {
     )
   }
 
-  const getRowBaseBg = (classificacao: string, status: string) => {
+  const getRowBaseBg = (classificacao: string, status: string, isSelected: boolean) => {
+    let bg = ''
+
     if (
       status === 'Divergência' ||
       status === 'Faltando no Velit' ||
       status === 'Faltando no Domínio'
     ) {
-      return 'bg-red-900/90 text-white group-hover:bg-red-900 border-b border-red-950 dark:bg-red-950/80 dark:group-hover:bg-red-950 font-semibold'
+      bg =
+        'text-white border-b border-red-950 font-semibold ' +
+        (isSelected
+          ? 'bg-red-700 dark:bg-red-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+          : 'bg-red-900/90 dark:bg-red-950/80 group-hover:bg-red-800 dark:group-hover:bg-red-900')
+      return bg
     }
-    if (!classificacao || classificacao === '-')
-      return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/50'
+
+    if (!classificacao || classificacao === '-') {
+      bg =
+        'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 ' +
+        (isSelected
+          ? 'bg-slate-100 dark:bg-slate-800 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]'
+          : 'bg-white dark:bg-slate-950 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/70')
+      return bg
+    }
+
     const level = classificacao.split('.').length
-    if (level === 1)
-      return 'bg-indigo-700 text-white group-hover:bg-indigo-800 border-b border-indigo-800 dark:bg-indigo-900 dark:group-hover:bg-indigo-800/80 font-bold'
-    if (level === 2)
-      return 'bg-indigo-600 text-white group-hover:bg-indigo-700 border-b border-indigo-700 dark:bg-indigo-800 dark:group-hover:bg-indigo-700/80 font-bold'
-    if (level === 3)
-      return 'bg-blue-500 text-white group-hover:bg-blue-600 border-b border-blue-600 dark:bg-blue-700 dark:group-hover:bg-blue-600/80 font-semibold'
-    if (level === 4)
-      return 'bg-blue-50 text-blue-950 group-hover:bg-blue-100 border-b border-blue-100 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-800 dark:group-hover:bg-blue-900/50 font-medium'
-    return 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/50'
+    if (level === 1) {
+      bg =
+        'text-white border-b border-indigo-800 dark:border-indigo-700 font-bold ' +
+        (isSelected
+          ? 'bg-indigo-500 dark:bg-indigo-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+          : 'bg-indigo-700 dark:bg-indigo-900 group-hover:bg-indigo-600 dark:group-hover:bg-indigo-800')
+    } else if (level === 2) {
+      bg =
+        'text-white border-b border-indigo-700 dark:border-indigo-600 font-bold ' +
+        (isSelected
+          ? 'bg-indigo-400 dark:bg-indigo-500 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+          : 'bg-indigo-600 dark:bg-indigo-800 group-hover:bg-indigo-500 dark:group-hover:bg-indigo-700')
+    } else if (level === 3) {
+      bg =
+        'text-white border-b border-blue-600 dark:border-blue-500 font-semibold ' +
+        (isSelected
+          ? 'bg-blue-400 dark:bg-blue-500 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+          : 'bg-blue-500 dark:bg-blue-700 group-hover:bg-blue-400 dark:group-hover:bg-blue-600')
+    } else if (level === 4) {
+      bg =
+        'border-b border-blue-100 dark:border-blue-800 font-medium ' +
+        (isSelected
+          ? 'bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-100 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+          : 'bg-blue-50 text-blue-950 dark:bg-blue-900/30 dark:text-blue-100 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60')
+    } else {
+      bg =
+        'text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 ' +
+        (isSelected
+          ? 'bg-slate-100 dark:bg-slate-800 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]'
+          : 'bg-white dark:bg-slate-950 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/70')
+    }
+
+    return bg
   }
 
-  const getDiffCellClass = (val: number, classificacao: string, extraClasses: string) => {
+  const getDiffCellClass = (
+    val: number,
+    classificacao: string,
+    extraClasses: string,
+    isSelected: boolean,
+  ) => {
     const isError = Math.abs(val) > 0.01
 
     let fontWeight = ''
@@ -349,13 +394,15 @@ export default function ConciliacaoBalancetes() {
     let bgColor = ''
     let borderColor = ''
     if (isError) {
-      bgColor =
-        'bg-red-900/90 group-hover:bg-red-900 dark:bg-red-950/90 dark:group-hover:bg-red-950'
-      borderColor = 'border-b border-red-950/50'
+      bgColor = isSelected
+        ? 'bg-red-700 dark:bg-red-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+        : 'bg-red-900/90 dark:bg-red-950/90 group-hover:bg-red-800 dark:group-hover:bg-red-900'
+      borderColor = 'border-b border-red-950/50 dark:border-red-900/50'
     } else {
-      bgColor =
-        'bg-blue-900/90 group-hover:bg-blue-900 dark:bg-blue-950/90 dark:group-hover:bg-blue-950'
-      borderColor = 'border-b border-blue-950/50'
+      bgColor = isSelected
+        ? 'bg-blue-800 dark:bg-blue-800 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]'
+        : 'bg-blue-900/90 dark:bg-blue-950/90 group-hover:bg-blue-800 dark:group-hover:bg-blue-900'
+      borderColor = 'border-b border-blue-950/50 dark:border-blue-900/50'
     }
 
     return cn(extraClasses, bgColor, 'text-white', fontWeight, borderColor)
@@ -562,16 +609,26 @@ export default function ConciliacaoBalancetes() {
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((row) => {
-                  const baseBg = getRowBaseBg(row.classificacao, row.status)
+                  const isSelected = row.id === selectedRowId
+                  const baseBg = getRowBaseBg(row.classificacao, row.status, isSelected)
                   return (
                     <TableRow
                       key={row.id}
-                      className="group border-none bg-transparent hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent"
+                      onClick={() => setSelectedRowId(isSelected ? null : row.id)}
+                      className={cn(
+                        'group cursor-pointer border-none bg-transparent hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent transition-all duration-200',
+                        isSelected
+                          ? 'relative z-10 shadow-[0_0_15px_rgba(0,0,0,0.15)] dark:shadow-[0_0_15px_rgba(0,0,0,0.5)] ring-1 ring-amber-500/50'
+                          : '',
+                      )}
                     >
                       <TableCell
                         className={cn(
-                          'py-1 px-2 h-auto font-medium whitespace-nowrap border-l transition-colors',
+                          'py-1 h-auto font-medium whitespace-nowrap transition-colors',
                           baseBg,
+                          isSelected
+                            ? 'border-l-4 border-l-amber-500 pl-1 pr-2'
+                            : 'border-l border-l-transparent px-2',
                         )}
                       >
                         {row.codigo}
@@ -672,6 +729,7 @@ export default function ConciliacaoBalancetes() {
                           row.dif_saldo_anterior,
                           row.classificacao,
                           'py-1 px-2 h-auto text-right whitespace-nowrap border-l transition-colors',
+                          isSelected,
                         )}
                       >
                         {formatCurrency(row.dif_saldo_anterior)}
@@ -681,6 +739,7 @@ export default function ConciliacaoBalancetes() {
                           row.dif_debito,
                           row.classificacao,
                           'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
+                          isSelected,
                         )}
                       >
                         {formatCurrency(row.dif_debito)}
@@ -690,6 +749,7 @@ export default function ConciliacaoBalancetes() {
                           row.dif_credito,
                           row.classificacao,
                           'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
+                          isSelected,
                         )}
                       >
                         {formatCurrency(row.dif_credito)}
@@ -699,6 +759,7 @@ export default function ConciliacaoBalancetes() {
                           row.diferenca,
                           row.classificacao,
                           'py-1 px-2 h-auto text-right whitespace-nowrap transition-colors',
+                          isSelected,
                         )}
                       >
                         {formatCurrency(row.diferenca)}
