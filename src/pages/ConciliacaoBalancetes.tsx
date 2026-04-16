@@ -158,9 +158,9 @@ export default function ConciliacaoBalancetes() {
 
           let status = 'OK'
           if (!temDominio && temVelit) {
-            status = 'Faltando no Domínio'
+            status = 'Sem lctos no Dominio'
           } else if (temDominio && !temVelit) {
-            status = 'Faltando no Velit'
+            status = 'Sem lctos no Velit'
           } else if (
             Math.abs(diferenca) > 0.01 ||
             Math.abs(dif_saldo_anterior) > 0.01 ||
@@ -297,7 +297,7 @@ export default function ConciliacaoBalancetes() {
         </Badge>
       )
     }
-    if (status === 'Faltando no Velit' || status === 'Faltando no Domínio') {
+    if (status === 'Sem lctos no Velit' || status === 'Sem lctos no Dominio') {
       return (
         <Badge className="bg-rose-700 hover:bg-rose-800 text-white font-medium shadow-sm border-0 text-[10px] py-0 px-1.5 leading-tight h-4">
           {status}
@@ -314,8 +314,8 @@ export default function ConciliacaoBalancetes() {
   const getRowBaseBg = (classificacao: string, status: string) => {
     if (
       status === 'Divergência' ||
-      status === 'Faltando no Velit' ||
-      status === 'Faltando no Domínio'
+      status === 'Sem lctos no Velit' ||
+      status === 'Sem lctos no Dominio'
     ) {
       return 'text-white border-b border-red-950/50 font-semibold bg-red-900/90 dark:bg-red-950/90'
     }
@@ -459,8 +459,8 @@ export default function ConciliacaoBalancetes() {
                     <SelectItem value="ALL">Todos os Status</SelectItem>
                     <SelectItem value="OK">OK</SelectItem>
                     <SelectItem value="Divergência">Divergência</SelectItem>
-                    <SelectItem value="Faltando no Velit">Faltando no Velit</SelectItem>
-                    <SelectItem value="Faltando no Domínio">Faltando no Domínio</SelectItem>
+                    <SelectItem value="Sem lctos no Velit">Sem lctos no Velit</SelectItem>
+                    <SelectItem value="Sem lctos no Dominio">Sem lctos no Dominio</SelectItem>
                     <SelectItem value="Sem Conta">Sem Conta</SelectItem>
                   </SelectContent>
                 </Select>

@@ -69,8 +69,8 @@ export function ResultsTable({ data }: ResultsTableProps) {
               <SelectItem value="ALL">Todos os Status</SelectItem>
               <SelectItem value="MATCHED">Conciliados</SelectItem>
               <SelectItem value="MISMATCH">Divergentes</SelectItem>
-              <SelectItem value="MISSING_VELIT">Faltando no Velit</SelectItem>
-              <SelectItem value="MISSING_DOMINIO">Faltando no Domínio</SelectItem>
+              <SelectItem value="MISSING_VELIT">Sem lctos no Velit</SelectItem>
+              <SelectItem value="MISSING_DOMINIO">Sem lctos no Dominio</SelectItem>
             </SelectContent>
           </Select>
           {(searchTerm || statusFilter !== 'ALL') && (

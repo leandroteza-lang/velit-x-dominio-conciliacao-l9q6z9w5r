@@ -29,7 +29,7 @@ export function StatusBadge({ status }: { status: ComparisonStatus }) {
           variant="outline"
           className="bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800 gap-1 font-medium"
         >
-          <X className="w-3 h-3" /> Faltando Velit
+          <X className="w-3 h-3" /> Sem lctos no Velit
         </Badge>
       )
     case 'MISSING_DOMINIO':
@@ -38,7 +38,7 @@ export function StatusBadge({ status }: { status: ComparisonStatus }) {
           variant="outline"
           className="bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800 gap-1 font-medium"
         >
-          <HelpCircle className="w-3 h-3" /> Faltando Domínio
+          <HelpCircle className="w-3 h-3" /> Sem lctos no Dominio
         </Badge>
       )
     default:
