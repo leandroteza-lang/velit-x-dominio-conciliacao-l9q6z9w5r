@@ -958,7 +958,7 @@ export default function ConciliacaoBalancetes() {
 
                   <TableRow className="bg-transparent hover:bg-transparent border-none">
                     <TableHead
-                      style={{ width: '6%' }}
+                      style={{ width: '4%' }}
                       className="h-6 py-0 px-1 font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] border-none border-t border-t-black/10 text-center align-middle text-[10px]"
                     >
                       Código
@@ -970,7 +970,7 @@ export default function ConciliacaoBalancetes() {
                       Classificação
                     </TableHead>
                     <TableHead
-                      style={{ width: '14%' }}
+                      style={{ width: '16%' }}
                       className="h-6 py-0 px-1 font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] border-none border-t border-t-black/10 text-center align-middle text-[10px]"
                     >
                       Nome da Conta
@@ -1296,10 +1296,7 @@ export default function ConciliacaoBalancetes() {
                               baseBg,
                             )}
                           >
-                            <span
-                              className="block truncate max-w-[120px] sm:max-w-[180px]"
-                              title={row.nome}
-                            >
+                            <span className="block truncate max-w-full" title={row.nome}>
                               {row.nome}
                             </span>
                           </TableCell>
