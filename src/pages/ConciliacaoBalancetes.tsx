@@ -40,6 +40,7 @@ import {
   ChevronsRight,
   FileX,
   Filter,
+  FilterX,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -100,6 +101,27 @@ export default function ConciliacaoBalancetes() {
   const [filterDifDebito, setFilterDifDebito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
   const [filterDifCredito, setFilterDifCredito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
   const [filterDiferenca, setFilterDiferenca] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
+
+  const hasActiveFilters =
+    searchTerm.trim() !== '' ||
+    statusFilter !== 'ALL' ||
+    accountTypeFilters.length > 0 ||
+    filterDifSaldoAnt !== 'ALL' ||
+    filterDifDebito !== 'ALL' ||
+    filterDifCredito !== 'ALL' ||
+    filterDiferenca !== 'ALL'
+
+  const clearAllFilters = () => {
+    setSearchTerm('')
+    setStatusFilter('ALL')
+    setAccountTypeFilters([])
+    setFilterDifSaldoAnt('ALL')
+    setFilterDifDebito('ALL')
+    setFilterDifCredito('ALL')
+    setFilterDiferenca('ALL')
+    setCollapsedNodes(new Set())
+    setCurrentPage(1)
+  }
 
   const toggleCollapse = (classificacao: string) => {
     setCollapsedNodes((prev) => {
@@ -710,6 +732,21 @@ export default function ConciliacaoBalancetes() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {hasActiveFilters && (
+                <div className="flex items-center sm:ml-1 sm:pl-3 sm:border-l border-slate-200 dark:border-slate-800 flex-1 sm:flex-none">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    className="h-9 w-full sm:w-auto px-2 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                    title="Limpar todos os filtros"
+                  >
+                    <FilterX className="w-4 h-4 mr-1.5" />
+                    <span className="text-xs font-medium">Limpar Filtros</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
