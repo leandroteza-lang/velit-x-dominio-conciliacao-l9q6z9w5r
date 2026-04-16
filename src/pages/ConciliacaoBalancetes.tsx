@@ -33,6 +33,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   FileX,
@@ -92,6 +93,19 @@ export default function ConciliacaoBalancetes() {
   const [importacoes, setImportacoes] = useState<any[]>([])
   const [selectedImportId, setSelectedImportId] = useState<string>('')
   const [itemsPerPage, setItemsPerPage] = useState(50)
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
+
+  const toggleCollapse = (classificacao: string) => {
+    setCollapsedNodes((prev) => {
+      const next = new Set(prev)
+      if (next.has(classificacao)) {
+        next.delete(classificacao)
+      } else {
+        next.add(classificacao)
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     const fetchPeriods = async () => {
@@ -241,6 +255,7 @@ export default function ConciliacaoBalancetes() {
   }, [data])
 
   const filteredData = useMemo(() => {
+    const isSearching = searchTerm.trim().length > 0
     return dataWithTypes.filter((item) => {
       const searchLower = searchTerm.toLowerCase()
       const matchSearch =
@@ -284,9 +299,22 @@ export default function ConciliacaoBalancetes() {
         }
       }
 
+      if (!isSearching) {
+        if (item.classificacao && item.classificacao !== '-') {
+          let isHidden = false
+          for (const collapsedNode of collapsedNodes) {
+            if (item.classificacao.startsWith(collapsedNode + '.')) {
+              isHidden = true
+              break
+            }
+          }
+          if (isHidden) return false
+        }
+      }
+
       return matchSearch && matchStatus && matchType
     })
-  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilters])
+  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilters, collapsedNodes])
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
   const paginatedData = filteredData.slice(
@@ -456,6 +484,31 @@ export default function ConciliacaoBalancetes() {
               />
             </div>
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-800 pr-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 bg-white dark:bg-slate-950 shadow-sm"
+                  onClick={() => setCollapsedNodes(new Set())}
+                  title="Expandir Todos"
+                >
+                  <ChevronDown className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 bg-white dark:bg-slate-950 shadow-sm"
+                  onClick={() => {
+                    const allSinteticas = dataWithTypes
+                      .filter((d) => d.isSintetica)
+                      .map((d) => d.classificacao)
+                    setCollapsedNodes(new Set(allSinteticas))
+                  }}
+                  title="Recolher Todos"
+                >
+                  <ChevronRight className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                </Button>
+              </div>
               <div className="flex items-center gap-2 flex-1 sm:flex-none">
                 <span className="text-sm font-medium text-slate-500 whitespace-nowrap">
                   Período:
@@ -708,6 +761,12 @@ export default function ConciliacaoBalancetes() {
                 paginatedData.map((row) => {
                   const isSelected = row.id === selectedRowId
                   const baseBg = getRowBaseBg(row.classificacao, row.status)
+                  const isSearching = searchTerm.trim().length > 0
+                  const level =
+                    row.classificacao && row.classificacao !== '-'
+                      ? row.classificacao.split('.').length
+                      : 1
+
                   return (
                     <TableRow
                       key={row.id}
@@ -731,7 +790,44 @@ export default function ConciliacaoBalancetes() {
                           baseBg,
                         )}
                       >
-                        {row.classificacao}
+                        <div
+                          className="flex items-center gap-1.5"
+                          style={{
+                            paddingLeft:
+                              !isSearching && row.classificacao !== '-'
+                                ? `${(level - 1) * 12}px`
+                                : undefined,
+                          }}
+                        >
+                          {row.isSintetica ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleCollapse(row.classificacao)
+                              }}
+                              className="p-0 hover:bg-black/10 dark:hover:bg-white/10 rounded transition-colors flex items-center justify-center w-4 h-4"
+                            >
+                              {collapsedNodes.has(row.classificacao) ? (
+                                <ChevronRight className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          ) : (
+                            <div className="w-4 h-4" />
+                          )}
+                          <span
+                            className={cn(
+                              'inline-flex items-center justify-center px-1 rounded-[3px] text-[9px] font-bold h-[15px] min-w-[15px]',
+                              row.isSintetica
+                                ? 'bg-slate-200/50 text-slate-700 dark:bg-slate-700/50 dark:text-slate-200'
+                                : 'bg-blue-100/50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+                            )}
+                          >
+                            {row.isSintetica ? 'S' : 'A'}
+                          </span>
+                          <span>{row.classificacao}</span>
+                        </div>
                       </TableCell>
                       <TableCell
                         className={cn(
