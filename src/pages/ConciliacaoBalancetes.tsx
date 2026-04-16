@@ -27,6 +27,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
 import {
   Loader2,
@@ -94,6 +96,10 @@ export default function ConciliacaoBalancetes() {
   const [selectedImportId, setSelectedImportId] = useState<string>('')
   const [itemsPerPage, setItemsPerPage] = useState(500)
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
+  const [filterDifSaldoAnt, setFilterDifSaldoAnt] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
+  const [filterDifDebito, setFilterDifDebito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
+  const [filterDifCredito, setFilterDifCredito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
+  const [filterDiferenca, setFilterDiferenca] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
 
   const toggleCollapse = (classificacao: string) => {
     setCollapsedNodes((prev) => {
@@ -312,9 +318,48 @@ export default function ConciliacaoBalancetes() {
         }
       }
 
-      return matchSearch && matchStatus && matchType
+      const matchDifSaldoAnt =
+        filterDifSaldoAnt === 'ALL' ||
+        (filterDifSaldoAnt === 'DIVERGENCE'
+          ? Math.abs(item.dif_saldo_anterior) > 0.01
+          : Math.abs(item.dif_saldo_anterior) <= 0.01)
+      const matchDifDebito =
+        filterDifDebito === 'ALL' ||
+        (filterDifDebito === 'DIVERGENCE'
+          ? Math.abs(item.dif_debito) > 0.01
+          : Math.abs(item.dif_debito) <= 0.01)
+      const matchDifCredito =
+        filterDifCredito === 'ALL' ||
+        (filterDifCredito === 'DIVERGENCE'
+          ? Math.abs(item.dif_credito) > 0.01
+          : Math.abs(item.dif_credito) <= 0.01)
+      const matchDiferenca =
+        filterDiferenca === 'ALL' ||
+        (filterDiferenca === 'DIVERGENCE'
+          ? Math.abs(item.diferenca) > 0.01
+          : Math.abs(item.diferenca) <= 0.01)
+
+      return (
+        matchSearch &&
+        matchStatus &&
+        matchType &&
+        matchDifSaldoAnt &&
+        matchDifDebito &&
+        matchDifCredito &&
+        matchDiferenca
+      )
     })
-  }, [dataWithTypes, searchTerm, statusFilter, accountTypeFilters, collapsedNodes])
+  }, [
+    dataWithTypes,
+    searchTerm,
+    statusFilter,
+    accountTypeFilters,
+    collapsedNodes,
+    filterDifSaldoAnt,
+    filterDifDebito,
+    filterDifCredito,
+    filterDiferenca,
+  ])
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
   const paginatedData = filteredData.slice(
@@ -359,7 +404,15 @@ export default function ConciliacaoBalancetes() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, accountTypeFilters])
+  }, [
+    searchTerm,
+    statusFilter,
+    accountTypeFilters,
+    filterDifSaldoAnt,
+    filterDifDebito,
+    filterDifCredito,
+    filterDiferenca,
+  ])
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -739,17 +792,161 @@ export default function ConciliacaoBalancetes() {
 
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700 text-right">
-                  Dif. S. Ant.
+                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    Dif. S. Ant.
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
+                            filterDifSaldoAnt !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                          )}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel className="text-xs">
+                          Filtrar Dif. Saldo Anterior
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup
+                          value={filterDifSaldoAnt}
+                          onValueChange={(v: any) => setFilterDifSaldoAnt(v)}
+                        >
+                          <DropdownMenuRadioItem value="ALL" className="text-xs">
+                            Todas
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="DIVERGENCE" className="text-xs">
+                            Com Divergência
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="OK" className="text-xs">
+                            OK (Sem Divergência)
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
-                  Dif. Déb.
+                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    Dif. Déb.
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
+                            filterDifDebito !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                          )}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel className="text-xs">
+                          Filtrar Dif. Débito
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup
+                          value={filterDifDebito}
+                          onValueChange={(v: any) => setFilterDifDebito(v)}
+                        >
+                          <DropdownMenuRadioItem value="ALL" className="text-xs">
+                            Todas
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="DIVERGENCE" className="text-xs">
+                            Com Divergência
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="OK" className="text-xs">
+                            OK (Sem Divergência)
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
-                  Dif. Créd.
+                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    Dif. Créd.
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
+                            filterDifCredito !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                          )}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel className="text-xs">
+                          Filtrar Dif. Crédito
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup
+                          value={filterDifCredito}
+                          onValueChange={(v: any) => setFilterDifCredito(v)}
+                        >
+                          <DropdownMenuRadioItem value="ALL" className="text-xs">
+                            Todas
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="DIVERGENCE" className="text-xs">
+                            Com Divergência
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="OK" className="text-xs">
+                            OK (Sem Divergência)
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
-                  Dif. Atual
+                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    Dif. Atual
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
+                            filterDiferenca !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                          )}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel className="text-xs">
+                          Filtrar Dif. Atual
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup
+                          value={filterDiferenca}
+                          onValueChange={(v: any) => setFilterDiferenca(v)}
+                        >
+                          <DropdownMenuRadioItem value="ALL" className="text-xs">
+                            Todas
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="DIVERGENCE" className="text-xs">
+                            Com Divergência
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="OK" className="text-xs">
+                            OK (Sem Divergência)
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableHead>
                 <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700 text-center">
                   Status
