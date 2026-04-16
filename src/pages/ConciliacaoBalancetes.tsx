@@ -151,10 +151,11 @@ export default function ConciliacaoBalancetes() {
           const credito_velit = Number(velit.credito) || 0
           const saldo_atual_velit = Number(velit.saldo_atual) || 0
 
-          const dif_saldo_anterior = saldo_anterior_velit - saldo_anterior_dominio
-          const dif_debito = debito_velit - debito_dominio
-          const dif_credito = credito_velit - credito_dominio
-          const diferenca = saldo_atual_velit - saldo_atual_dominio
+          const dif_saldo_anterior =
+            Math.abs(saldo_anterior_velit) - Math.abs(saldo_anterior_dominio)
+          const dif_debito = Math.abs(debito_velit) - Math.abs(debito_dominio)
+          const dif_credito = Math.abs(credito_velit) - Math.abs(credito_dominio)
+          const diferenca = Math.abs(saldo_atual_velit) - Math.abs(saldo_atual_dominio)
 
           let status = 'OK'
           if (!temDominio && temVelit) {
