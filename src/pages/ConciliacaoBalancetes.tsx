@@ -44,6 +44,9 @@ type ConciliacaoRow = {
   debito_dominio: number
   credito_dominio: number
   saldo_atual_dominio: number
+  dif_saldo_anterior: number
+  dif_debito: number
+  dif_credito: number
   diferenca: number
   status: string
 }
@@ -147,14 +150,22 @@ export default function ConciliacaoBalancetes() {
           const credito_velit = Number(velit.credito) || 0
           const saldo_atual_velit = Number(velit.saldo_atual) || 0
 
-          const diferenca = saldo_atual_dominio - saldo_atual_velit
+          const dif_saldo_anterior = saldo_anterior_velit - saldo_anterior_dominio
+          const dif_debito = debito_velit - debito_dominio
+          const dif_credito = credito_velit - credito_dominio
+          const diferenca = saldo_atual_velit - saldo_atual_dominio
 
           let status = 'OK'
           if (!temDominio && temVelit) {
             status = 'Faltando no Domínio'
           } else if (temDominio && !temVelit) {
             status = 'Faltando no Velit'
-          } else if (Math.abs(diferenca) > 0.01) {
+          } else if (
+            Math.abs(diferenca) > 0.01 ||
+            Math.abs(dif_saldo_anterior) > 0.01 ||
+            Math.abs(dif_debito) > 0.01 ||
+            Math.abs(dif_credito) > 0.01
+          ) {
             status = 'Divergência'
           } else if (!plano.id) {
             status = 'Sem Conta'
@@ -176,8 +187,11 @@ export default function ConciliacaoBalancetes() {
             debito_dominio,
             credito_dominio,
             saldo_atual_dominio,
-            diferenca: diferenca,
-            status: status,
+            dif_saldo_anterior,
+            dif_debito,
+            dif_credito,
+            diferenca,
+            status,
           }
         })
 
@@ -237,6 +251,9 @@ export default function ConciliacaoBalancetes() {
         debito_dominio: acc.debito_dominio + row.debito_dominio,
         credito_dominio: acc.credito_dominio + row.credito_dominio,
         saldo_atual_dominio: acc.saldo_atual_dominio + row.saldo_atual_dominio,
+        dif_saldo_anterior: acc.dif_saldo_anterior + row.dif_saldo_anterior,
+        dif_debito: acc.dif_debito + row.dif_debito,
+        dif_credito: acc.dif_credito + row.dif_credito,
         diferenca: acc.diferenca + row.diferenca,
       }),
       {
@@ -248,6 +265,9 @@ export default function ConciliacaoBalancetes() {
         debito_dominio: 0,
         credito_dominio: 0,
         saldo_atual_dominio: 0,
+        dif_saldo_anterior: 0,
+        dif_debito: 0,
+        dif_credito: 0,
         diferenca: 0,
       },
     )
@@ -315,6 +335,26 @@ export default function ConciliacaoBalancetes() {
   const isDarkRow = (classificacao: string) => {
     if (!classificacao || classificacao === '-') return false
     return classificacao.split('.').length <= 3
+  }
+
+  const getDiffCellClass = (
+    val: number,
+    status: string,
+    classificacao: string,
+    baseClasses: string,
+  ) => {
+    return cn(
+      baseClasses,
+      val !== 0
+        ? status === 'Divergência' ||
+          status === 'Faltando no Velit' ||
+          status === 'Faltando no Domínio'
+          ? 'text-white'
+          : isDarkRow(classificacao)
+            ? 'text-red-300'
+            : 'text-red-600 dark:text-red-400'
+        : '',
+    )
   }
 
   if (loading) {
@@ -445,10 +485,10 @@ export default function ConciliacaoBalancetes() {
                   DOMÍNIO
                 </TableHead>
                 <TableHead
-                  colSpan={2}
+                  colSpan={5}
                   className="py-1 px-1 h-auto text-center font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                 >
-                  Análise
+                  Análise de Diferenças (VELIT - DOMÍNIO)
                 </TableHead>
               </TableRow>
               <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-900 border-b shadow-sm">
@@ -489,9 +529,18 @@ export default function ConciliacaoBalancetes() {
                 </TableHead>
 
                 <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
-                  Diferença
+                  Dif. S. Ant.
                 </TableHead>
-                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                  Dif. Déb.
+                </TableHead>
+                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                  Dif. Créd.
+                </TableHead>
+                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap bg-slate-50 dark:bg-slate-900">
+                  Dif. Atual
+                </TableHead>
+                <TableHead className="py-1 px-1 h-auto font-semibold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700">
                   Status
                 </TableHead>
               </TableRow>
@@ -545,29 +594,53 @@ export default function ConciliacaoBalancetes() {
                     </TableCell>
 
                     <TableCell
-                      className={cn(
-                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap',
-                        row.diferenca !== 0
-                          ? row.status === 'Divergência' ||
-                            row.status === 'Faltando no Velit' ||
-                            row.status === 'Faltando no Domínio'
-                            ? 'text-white'
-                            : isDarkRow(row.classificacao)
-                              ? 'text-red-300'
-                              : 'text-red-600 dark:text-red-400'
-                          : '',
+                      className={getDiffCellClass(
+                        row.dif_saldo_anterior,
+                        row.status,
+                        row.classificacao,
+                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap border-l border-slate-200/50 dark:border-slate-700/50 bg-slate-50/20 dark:bg-slate-900/20',
+                      )}
+                    >
+                      {formatCurrency(row.dif_saldo_anterior)}
+                    </TableCell>
+                    <TableCell
+                      className={getDiffCellClass(
+                        row.dif_debito,
+                        row.status,
+                        row.classificacao,
+                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
+                      )}
+                    >
+                      {formatCurrency(row.dif_debito)}
+                    </TableCell>
+                    <TableCell
+                      className={getDiffCellClass(
+                        row.dif_credito,
+                        row.status,
+                        row.classificacao,
+                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
+                      )}
+                    >
+                      {formatCurrency(row.dif_credito)}
+                    </TableCell>
+                    <TableCell
+                      className={getDiffCellClass(
+                        row.diferenca,
+                        row.status,
+                        row.classificacao,
+                        'py-0.5 px-1 h-auto text-right font-bold whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20',
                       )}
                     >
                       {formatCurrency(row.diferenca)}
                     </TableCell>
-                    <TableCell className="py-0.5 px-1 h-auto text-center whitespace-nowrap">
+                    <TableCell className="py-0.5 px-1 h-auto text-center whitespace-nowrap bg-slate-50/20 dark:bg-slate-900/20 border-l border-slate-200/50 dark:border-slate-700/50">
                       {getStatusBadge(row.status)}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={14} className="h-32 text-center">
+                  <TableCell colSpan={16} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-500">
                       <FileX className="w-10 h-10 mb-3 opacity-30" />
                       <p className="font-medium">
@@ -611,6 +684,37 @@ export default function ConciliacaoBalancetes() {
                   <TableCell className="text-right py-2 px-1 text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900">
                     {formatCurrency(totaisAnaliticos.saldo_atual_dominio)}
                   </TableCell>
+
+                  <TableCell
+                    className={cn(
+                      'text-right py-2 px-1 border-l border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900',
+                      totaisAnaliticos.dif_saldo_anterior !== 0
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-slate-700 dark:text-slate-300',
+                    )}
+                  >
+                    {formatCurrency(totaisAnaliticos.dif_saldo_anterior)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
+                      totaisAnaliticos.dif_debito !== 0
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-slate-700 dark:text-slate-300',
+                    )}
+                  >
+                    {formatCurrency(totaisAnaliticos.dif_debito)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
+                      totaisAnaliticos.dif_credito !== 0
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-slate-700 dark:text-slate-300',
+                    )}
+                  >
+                    {formatCurrency(totaisAnaliticos.dif_credito)}
+                  </TableCell>
                   <TableCell
                     className={cn(
                       'text-right py-2 px-1 bg-slate-100 dark:bg-slate-900',
@@ -621,7 +725,8 @@ export default function ConciliacaoBalancetes() {
                   >
                     {formatCurrency(totaisAnaliticos.diferenca)}
                   </TableCell>
-                  <TableCell className="py-2 px-1 bg-slate-100 dark:bg-slate-900"></TableCell>
+
+                  <TableCell className="py-2 px-1 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></TableCell>
                 </TableRow>
               </TableFooter>
             )}
