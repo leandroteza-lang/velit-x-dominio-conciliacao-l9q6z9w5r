@@ -92,7 +92,7 @@ export default function ConciliacaoBalancetes() {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
   const [importacoes, setImportacoes] = useState<any[]>([])
   const [selectedImportId, setSelectedImportId] = useState<string>('')
-  const [itemsPerPage, setItemsPerPage] = useState(50)
+  const [itemsPerPage, setItemsPerPage] = useState(500)
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
 
   const toggleCollapse = (classificacao: string) => {
