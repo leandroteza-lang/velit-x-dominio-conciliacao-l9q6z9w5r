@@ -883,77 +883,77 @@ export default function ConciliacaoBalancetes() {
               <TableRow className="bg-transparent hover:bg-transparent border-none">
                 <TableHead
                   colSpan={3}
-                  className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-t-xl border-t border-x border-slate-200 dark:border-slate-700"
+                  className="py-2 px-2 text-center font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] rounded-t-xl border-none"
                 >
                   Identificação da Conta
                 </TableHead>
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={4}
-                  className="py-2 px-2 text-center font-bold text-indigo-800 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/50 rounded-t-xl border-t border-x border-indigo-200 dark:border-indigo-800/50"
+                  className="py-2 px-2 text-center font-bold text-black bg-gradient-to-br from-[#6c0572] to-[#ff006e] rounded-t-xl border-none"
                 >
                   VELIT
                 </TableHead>
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={4}
-                  className="py-2 px-2 text-center font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 rounded-t-xl border-t border-x border-emerald-200 dark:border-emerald-800/50"
+                  className="py-2 px-2 text-center font-bold text-black bg-gradient-to-br from-[#003d82] to-[#0099ff] rounded-t-xl border-none"
                 >
                   DOMÍNIO
                 </TableHead>
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
                 <TableHead
                   colSpan={5}
-                  className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 rounded-t-xl border-t border-x border-slate-200 dark:border-slate-700"
+                  className="py-2 px-2 text-center font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] rounded-t-xl border-none"
                 >
                   Análise de Diferenças (VELIT - DOMÍNIO)
                 </TableHead>
               </TableRow>
 
               <TableRow className="bg-transparent hover:bg-transparent border-none">
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] border-none border-t border-t-black/10">
                   Código
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] border-none border-t border-t-black/10">
                   Classificação
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] border-none border-t border-t-black/10">
                   Nome da Conta
                 </TableHead>
 
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
-                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-l border-b border-indigo-200 dark:border-indigo-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#6c0572] to-[#ff006e] border-none border-t border-t-black/10 text-right">
                   Saldo Ant.
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-200 dark:border-indigo-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#6c0572] to-[#ff006e] border-none border-t border-t-black/10 text-right">
                   Débito
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-200 dark:border-indigo-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#6c0572] to-[#ff006e] border-none border-t border-t-black/10 text-right">
                   Crédito
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-indigo-900 dark:text-indigo-200 bg-indigo-100/80 dark:bg-indigo-900/40 border-r border-b border-indigo-200 dark:border-indigo-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#6c0572] to-[#ff006e] border-none border-t border-t-black/10 text-right">
                   Saldo Atual
                 </TableHead>
 
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
-                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-l border-b border-emerald-200 dark:border-emerald-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#003d82] to-[#0099ff] border-none border-t border-t-black/10 text-right">
                   Saldo Ant.
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#003d82] to-[#0099ff] border-none border-t border-t-black/10 text-right">
                   Débito
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#003d82] to-[#0099ff] border-none border-t border-t-black/10 text-right">
                   Crédito
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-emerald-900 dark:text-emerald-200 bg-emerald-100/80 dark:bg-emerald-900/40 border-r border-b border-emerald-200 dark:border-emerald-800/50 text-right">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#003d82] to-[#0099ff] border-none border-t border-t-black/10 text-right">
                   Saldo Atual
                 </TableHead>
 
                 <TableHead className="w-3 min-w-[12px] max-w-[12px] p-0 border-none shadow-none bg-white dark:bg-slate-950" />
 
-                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-l border-b border-slate-200 dark:border-slate-700 text-right">
+                <TableHead className="py-1.5 px-1 font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] border-none border-t border-t-black/10 text-right">
                   <div className="flex items-center justify-end gap-1">
                     Dif. S. Ant.
                     <DropdownMenu>
@@ -962,8 +962,8 @@ export default function ConciliacaoBalancetes() {
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
-                            filterDifSaldoAnt !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                            'h-5 w-5 p-0 hover:bg-black/10 dark:hover:bg-black/20 text-black',
+                            filterDifSaldoAnt !== 'ALL' && 'bg-black/20',
                           )}
                         >
                           <Filter className="w-3 h-3" />
@@ -992,7 +992,7 @@ export default function ConciliacaoBalancetes() {
                     </DropdownMenu>
                   </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                <TableHead className="py-1.5 px-1 font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] border-none border-t border-t-black/10 text-right">
                   <div className="flex items-center justify-end gap-1">
                     Dif. Déb.
                     <DropdownMenu>
@@ -1001,8 +1001,8 @@ export default function ConciliacaoBalancetes() {
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
-                            filterDifDebito !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                            'h-5 w-5 p-0 hover:bg-black/10 dark:hover:bg-black/20 text-black',
+                            filterDifDebito !== 'ALL' && 'bg-black/20',
                           )}
                         >
                           <Filter className="w-3 h-3" />
@@ -1031,7 +1031,7 @@ export default function ConciliacaoBalancetes() {
                     </DropdownMenu>
                   </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                <TableHead className="py-1.5 px-1 font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] border-none border-t border-t-black/10 text-right">
                   <div className="flex items-center justify-end gap-1">
                     Dif. Créd.
                     <DropdownMenu>
@@ -1040,8 +1040,8 @@ export default function ConciliacaoBalancetes() {
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
-                            filterDifCredito !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                            'h-5 w-5 p-0 hover:bg-black/10 dark:hover:bg-black/20 text-black',
+                            filterDifCredito !== 'ALL' && 'bg-black/20',
                           )}
                         >
                           <Filter className="w-3 h-3" />
@@ -1070,7 +1070,7 @@ export default function ConciliacaoBalancetes() {
                     </DropdownMenu>
                   </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-right">
+                <TableHead className="py-1.5 px-1 font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] border-none border-t border-t-black/10 text-right">
                   <div className="flex items-center justify-end gap-1">
                     Dif. Atual
                     <DropdownMenu>
@@ -1079,8 +1079,8 @@ export default function ConciliacaoBalancetes() {
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            'h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-800',
-                            filterDiferenca !== 'ALL' && 'text-blue-600 dark:text-blue-400',
+                            'h-5 w-5 p-0 hover:bg-black/10 dark:hover:bg-black/20 text-black',
+                            filterDiferenca !== 'ALL' && 'bg-black/20',
                           )}
                         >
                           <Filter className="w-3 h-3" />
@@ -1109,7 +1109,7 @@ export default function ConciliacaoBalancetes() {
                     </DropdownMenu>
                   </div>
                 </TableHead>
-                <TableHead className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700 text-center">
+                <TableHead className="py-1.5 px-2 font-bold text-black bg-gradient-to-br from-[#8b4513] to-[#ff8c00] border-none border-t border-t-black/10 text-center">
                   Status
                 </TableHead>
               </TableRow>
