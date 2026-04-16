@@ -101,6 +101,9 @@ export default function ConciliacaoBalancetes() {
   const [filterDifDebito, setFilterDifDebito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
   const [filterDifCredito, setFilterDifCredito] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
   const [filterDiferenca, setFilterDiferenca] = useState<'ALL' | 'DIVERGENCE' | 'OK'>('ALL')
+  const [natureFilter, setNatureFilter] = useState<
+    'all' | 'ATIVO' | 'PASSIVO' | 'RECEITAS' | 'DESPESAS'
+  >('all')
 
   const hasActiveFilters =
     searchTerm.trim() !== '' ||
@@ -109,7 +112,8 @@ export default function ConciliacaoBalancetes() {
     filterDifSaldoAnt !== 'ALL' ||
     filterDifDebito !== 'ALL' ||
     filterDifCredito !== 'ALL' ||
-    filterDiferenca !== 'ALL'
+    filterDiferenca !== 'ALL' ||
+    natureFilter !== 'all'
 
   const clearAllFilters = () => {
     setSearchTerm('')
@@ -121,6 +125,7 @@ export default function ConciliacaoBalancetes() {
     setFilterDiferenca('ALL')
     setCollapsedNodes(new Set())
     setCurrentPage(1)
+    setNatureFilter('all')
   }
 
   const toggleCollapse = (classificacao: string) => {
@@ -282,6 +287,21 @@ export default function ConciliacaoBalancetes() {
     })
   }, [data])
 
+  const summary = useMemo(() => {
+    return dataWithTypes.reduce(
+      (acc, item) => {
+        if (item.classificacao && item.classificacao !== '-') {
+          if (item.classificacao.startsWith('1')) acc.ativo++
+          else if (item.classificacao.startsWith('2')) acc.passivo++
+          else if (item.classificacao.startsWith('3')) acc.receitas++
+          else if (item.classificacao.startsWith('4')) acc.despesas++
+        }
+        return acc
+      },
+      { ativo: 0, passivo: 0, receitas: 0, despesas: 0 },
+    )
+  }, [dataWithTypes])
+
   const filteredData = useMemo(() => {
     const isSearching = searchTerm.trim().length > 0
     return dataWithTypes.filter((item) => {
@@ -327,6 +347,18 @@ export default function ConciliacaoBalancetes() {
         }
       }
 
+      let matchCardNature = true
+      if (natureFilter !== 'all') {
+        if (!item.classificacao || item.classificacao === '-') {
+          matchCardNature = false
+        } else {
+          if (natureFilter === 'ATIVO') matchCardNature = item.classificacao.startsWith('1')
+          else if (natureFilter === 'PASSIVO') matchCardNature = item.classificacao.startsWith('2')
+          else if (natureFilter === 'RECEITAS') matchCardNature = item.classificacao.startsWith('3')
+          else if (natureFilter === 'DESPESAS') matchCardNature = item.classificacao.startsWith('4')
+        }
+      }
+
       if (!isSearching) {
         if (item.classificacao && item.classificacao !== '-') {
           let isHidden = false
@@ -365,6 +397,7 @@ export default function ConciliacaoBalancetes() {
         matchSearch &&
         matchStatus &&
         matchType &&
+        matchCardNature &&
         matchDifSaldoAnt &&
         matchDifDebito &&
         matchDifCredito &&
@@ -376,6 +409,7 @@ export default function ConciliacaoBalancetes() {
     searchTerm,
     statusFilter,
     accountTypeFilters,
+    natureFilter,
     collapsedNodes,
     filterDifSaldoAnt,
     filterDifDebito,
@@ -441,6 +475,7 @@ export default function ConciliacaoBalancetes() {
     searchTerm,
     statusFilter,
     accountTypeFilters,
+    natureFilter,
     filterDifSaldoAnt,
     filterDifDebito,
     filterDifCredito,
@@ -554,6 +589,84 @@ export default function ConciliacaoBalancetes() {
           <p className="text-slate-500 mt-1 text-sm sm:text-base">
             Conferência detalhada entre os saldos da VELIT e do Domínio.
           </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div
+          onClick={() => {
+            setNatureFilter(natureFilter === 'ATIVO' ? 'all' : 'ATIVO')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'bg-gradient-to-br from-[#0d5d5d] to-[#1dd1a1] rounded-[24px] border-0 cursor-pointer transition-all duration-200 hover:scale-105 text-white shadow-lg hover:shadow-xl hover:shadow-[#1dd1a1]/20 p-4 flex flex-col justify-between min-h-[120px]',
+            natureFilter === 'ATIVO'
+              ? 'ring-4 ring-[#1dd1a1] ring-offset-2 dark:ring-offset-slate-900'
+              : '',
+          )}
+        >
+          <div className="text-sm font-semibold opacity-90">CONTAS DE ATIVO</div>
+          <div>
+            <div className="text-3xl font-bold">{summary.ativo}</div>
+            <div className="text-xs opacity-80 mt-1">registros ativos na base</div>
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setNatureFilter(natureFilter === 'PASSIVO' ? 'all' : 'PASSIVO')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'bg-gradient-to-br from-[#6c0572] to-[#ff006e] rounded-[24px] border-0 cursor-pointer transition-all duration-200 hover:scale-105 text-white shadow-lg hover:shadow-xl hover:shadow-[#ff006e]/20 p-4 flex flex-col justify-between min-h-[120px]',
+            natureFilter === 'PASSIVO'
+              ? 'ring-4 ring-[#ff006e] ring-offset-2 dark:ring-offset-slate-900'
+              : '',
+          )}
+        >
+          <div className="text-sm font-semibold opacity-90">CONTAS DE PASSIVO</div>
+          <div>
+            <div className="text-3xl font-bold">{summary.passivo}</div>
+            <div className="text-xs opacity-80 mt-1">registros ativos na base</div>
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setNatureFilter(natureFilter === 'RECEITAS' ? 'all' : 'RECEITAS')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'bg-gradient-to-br from-[#003d82] to-[#0099ff] rounded-[24px] border-0 cursor-pointer transition-all duration-200 hover:scale-105 text-white shadow-lg hover:shadow-xl hover:shadow-[#0099ff]/20 p-4 flex flex-col justify-between min-h-[120px]',
+            natureFilter === 'RECEITAS'
+              ? 'ring-4 ring-[#0099ff] ring-offset-2 dark:ring-offset-slate-900'
+              : '',
+          )}
+        >
+          <div className="text-sm font-semibold opacity-90">CONTAS DE RECEITA</div>
+          <div>
+            <div className="text-3xl font-bold">{summary.receitas}</div>
+            <div className="text-xs opacity-80 mt-1">registros ativos na base</div>
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setNatureFilter(natureFilter === 'DESPESAS' ? 'all' : 'DESPESAS')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'bg-gradient-to-br from-[#8b4513] to-[#ff8c00] rounded-[24px] border-0 cursor-pointer transition-all duration-200 hover:scale-105 text-white shadow-lg hover:shadow-xl hover:shadow-[#ff8c00]/20 p-4 flex flex-col justify-between min-h-[120px]',
+            natureFilter === 'DESPESAS'
+              ? 'ring-4 ring-[#ff8c00] ring-offset-2 dark:ring-offset-slate-900'
+              : '',
+          )}
+        >
+          <div className="text-sm font-semibold opacity-90">CONTAS DE DESPESA</div>
+          <div>
+            <div className="text-3xl font-bold">{summary.despesas}</div>
+            <div className="text-xs opacity-80 mt-1">registros ativos na base</div>
+          </div>
         </div>
       </div>
 
